@@ -174,11 +174,32 @@ function getTargetY(domIdx) {
   return -(offset + slideH / 2 - viewH / 2);
 }
 
-// Find which DOM index is closest to current trackY
-function findNearest() {
+// Pre-allocated positions cache — reused every frame to avoid GC churn
+let posCache = [];
+
+// Build all center-Y values in ONE O(n) pass.
+// getTargetY(i) is O(n) itself, so calling it n times = O(n²).
+// This replaces that pattern everywhere in the hot RAF loop.
+function buildPositions() {
+  if (posCache.length !== metrics.length) posCache = new Array(metrics.length);
+  const viewH = filmClipper.offsetHeight;
+  let offset  = 0;
+  for (let i = 0; i < metrics.length; i++) {
+    const h    = metrics[i].realIndex === activeReal ? SLIDE_H.active : SLIDE_H.inactive;
+    posCache[i] = -(offset + h / 2 - viewH / 2);
+    offset     += h + CFG.imageGap;
+  }
+  return posCache;
+}
+
+// Find which DOM index is closest to current trackY.
+// Accepts a pre-built positions array (fast path from tick);
+// builds its own if called cold (e.g. from snap).
+function findNearest(pos) {
+  if (!pos) pos = buildPositions();
   let best = realStart(), bestDist = Infinity;
   for (let i = 0; i < metrics.length; i++) {
-    const dist = Math.abs(getTargetY(i) - trackY);
+    const dist = Math.abs(pos[i] - trackY);
     if (dist < bestDist) { bestDist = dist; best = i; }
   }
   return best;
@@ -292,19 +313,17 @@ function scrollListTo(track, activeEl) {
 /* ════════════════════════════════════════════════════════════════════
    PARALLAX
    ════════════════════════════════════════════════════════════════════ */
-function applyParallax() {
-  metrics.forEach((m, i) => {
-    // How far this slide's ideal center is from the current track position.
-    // Multiplied by a tiny factor and clamped so the range stays very small.
-    const slideCenter = getTargetY(i);
-    const raw    = (slideCenter - trackY) * CFG.parallaxStr;
-    const target = Math.max(-3.5, Math.min(3.5, raw));  // ±3.5% max travel
-
-    // Lerp the stored value toward the target — gives a silky, floating feel
+// pos is optional: pass the frame's pre-built array for O(1) lookups;
+// omit and it builds its own (used by snap's onUpdate).
+// Direct style.transform instead of gsap.set — avoids 15× GSAP overhead/frame.
+function applyParallax(pos) {
+  if (!pos) pos = buildPositions();
+  for (let i = 0; i < metrics.length; i++) {
+    const raw    = (pos[i] - trackY) * CFG.parallaxStr;
+    const target = Math.max(-3.5, Math.min(3.5, raw));
     parallaxY[i] += (target - parallaxY[i]) * CFG.parallaxLerp;
-
-    gsap.set(m.imgEl, { y: `${-10 + parallaxY[i]}%` });
-  });
+    metrics[i].imgEl.style.transform = `translateY(${-10 + parallaxY[i]}%)`;
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -379,44 +398,42 @@ function tick() {
   velocity *= CFG.friction;
   trackY   += velocity;
 
-  // Soft clamp at ends (gives slight resistance before snapping back)
-  const minY = getTargetY(metrics.length - 1) - 100;
-  const maxY = getTargetY(0) + 100;
+  // ── Build all positions ONCE this frame — O(n) total instead of O(n²)
+  // (getTargetY is O(n); calling it n times for parallax/findNearest = O(n²))
+  let pos = buildPositions();
+
+  // Soft clamp
+  const minY = pos[metrics.length - 1] - 100;
+  const maxY = pos[0] + 100;
   if (trackY < minY) { trackY = minY; velocity *= -0.3; }
   if (trackY > maxY) { trackY = maxY; velocity *= -0.3; }
 
   const absV = Math.abs(velocity);
 
   // ── SLOT-MACHINE MODE ──────────────────────────────────────────────
-  // When velocity drops below magnetThreshold the scroll is "slow":
-  //   1. Find the nearest slide and make it active immediately
-  //      (instant expand + list update — the slot-machine click feel).
-  //   2. Apply a gentle magnetic pull so trackY drifts toward that
-  //      slide's centre without a hard jump.
-  // Fast scrolls bypass this entirely so no active changes mid-throw.
   if (scrolling && absV < CFG.magnetThreshold) {
-    const nearestDom  = findNearest();
+    const nearestDom  = findNearest(pos);
     const nearestReal = domToReal(nearestDom);
-    if (nearestReal !== activeReal) setActive(nearestReal);   // live expand
-    const pullY = getTargetY(nearestDom);                     // uses updated heights
-    trackY += (pullY - trackY) * CFG.magnetStrength;
+    if (nearestReal !== activeReal) {
+      setActive(nearestReal);
+      pos = buildPositions();  // recompute after height change
+    }
+    trackY += (pos[nearestDom] - trackY) * CFG.magnetStrength;
   }
 
   gsap.set(filmTrack, { y: trackY });
 
-  // Barrel/pincushion — power-curved: slow = barely any distortion, fast = full max
-  // normV ∈ [-1, 1], then raise to barrelCurve so small values stay near 0
-  // and the full BARREL_MAX is only reached at max velocity.
+  // Barrel/pincushion — power-curved
   const normV   = Math.max(-1, Math.min(1, velocity / CFG.maxVelocity));
   const curved  = Math.sign(normV) * Math.pow(Math.abs(normV), CFG.barrelCurve);
   const targetD = -curved * BARREL_MAX;
   currentD += (targetD - currentD) * CFG.barrelLerp;
   if (Math.abs(currentD) > 0.5) updateClipPath(currentD);
 
-  // Parallax
-  applyParallax();
+  // Parallax — pass pre-built pos; direct style.transform (no gsap.set per image)
+  applyParallax(pos);
 
-  // Snap trigger — only arm if the user actually scrolled (prevents idle re-snap loop)
+  // Snap trigger
   if (scrolling && absV < 0.3) {
     clearTimeout(snapTimer);
     snapTimer = setTimeout(snap, CFG.snapIdleMs);
