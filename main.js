@@ -32,12 +32,14 @@ const CFG = {
   friction:         0.86,   // per-frame velocity decay
   wheelMult:        0.55,   // wheel delta → velocity multiplier
   maxVelocity:      45,     // cap px/frame
-  snapDuration:     0.9,
-  snapEase:         'power3.out',
+  snapDuration:     1.0,
+  snapEase:         'power2.inOut',
   barrelMax:        130,    // max bow in px (matches CSS --barrel-max)
   barrelCurve:      1.8,    // power exponent: >1 = slow scroll barely distorts, fast scroll hits max hard
   barrelLerp:       0.14,   // smoothing toward target distortion
   barrelRelaxDur:   0.7,    // ease back to 0 on snap
+  magnetThreshold:  12,     // velocity (px/frame) below which slot-machine mode activates
+  magnetStrength:   0.10,   // attraction pull per frame toward nearest center
   listEaseDur:      0.8,
   listEase:         'power2.inOut',
   parallaxStr:      0.025,  // raw pixel-distance multiplier — keep tiny
@@ -383,6 +385,23 @@ function tick() {
   if (trackY < minY) { trackY = minY; velocity *= -0.3; }
   if (trackY > maxY) { trackY = maxY; velocity *= -0.3; }
 
+  const absV = Math.abs(velocity);
+
+  // ── SLOT-MACHINE MODE ──────────────────────────────────────────────
+  // When velocity drops below magnetThreshold the scroll is "slow":
+  //   1. Find the nearest slide and make it active immediately
+  //      (instant expand + list update — the slot-machine click feel).
+  //   2. Apply a gentle magnetic pull so trackY drifts toward that
+  //      slide's centre without a hard jump.
+  // Fast scrolls bypass this entirely so no active changes mid-throw.
+  if (scrolling && absV < CFG.magnetThreshold) {
+    const nearestDom  = findNearest();
+    const nearestReal = domToReal(nearestDom);
+    if (nearestReal !== activeReal) setActive(nearestReal);   // live expand
+    const pullY = getTargetY(nearestDom);                     // uses updated heights
+    trackY += (pullY - trackY) * CFG.magnetStrength;
+  }
+
   gsap.set(filmTrack, { y: trackY });
 
   // Barrel/pincushion — power-curved: slow = barely any distortion, fast = full max
@@ -398,7 +417,7 @@ function tick() {
   applyParallax();
 
   // Snap trigger — only arm if the user actually scrolled (prevents idle re-snap loop)
-  if (scrolling && Math.abs(velocity) < 0.3) {
+  if (scrolling && absV < 0.3) {
     clearTimeout(snapTimer);
     snapTimer = setTimeout(snap, CFG.snapIdleMs);
   }
