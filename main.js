@@ -1,0 +1,457 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KHARCHE — Scroll Gallery  v2
+   - Wheel → velocity → RAF momentum
+   - SVG clip-path: barrel (forward) / pincushion (backward)
+   - Infinite loop via clones
+   - Parallax (subtle)
+   - List auto-centering via GSAP
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── DATA ──────────────────────────────────────────────────────── */
+const PROJECTS = [
+  { category: 'Home',      name: 'Home',        img: 'assets/pexels-shox-37520403.jpg' },
+  { category: 'Editorial', name: 'Still Life',  img: 'assets/pexels-benni-fish-40038242-36756262.jpg' },
+  { category: 'Editorial', name: 'Portraits',   img: 'assets/pexels-zulfugarkarimov-33719772.jpg' },
+  { category: 'Editorial', name: 'Fashion',     img: 'assets/pexels-reneterp-14318813.jpg' },
+  { category: 'Motion',    name: 'Urban Drift', img: 'assets/pexels-peter-dyllong-2158803154-36780320.jpg' },
+  { category: 'Motion',    name: 'Landscapes',  img: 'assets/pexels-navlakha-33803745.jpg' },
+  { category: 'Landscape', name: 'Mountains',   img: 'assets/pexels-wolfgang-weiser-467045605-27277417.jpg' },
+  { category: 'Landscape', name: 'Coastline',   img: 'assets/pexels-who0ne-36197805.jpg' },
+  { category: 'Portrait',  name: 'Closeup',     img: 'assets/pexels-robert-sliwinski-2155126657-37011539.jpg' },
+];
+const N         = PROJECTS.length;
+const CATEGORIES = [...new Set(PROJECTS.map(p => p.category))];
+
+/* ─── CLONE CONFIG ──────────────────────────────────────────────── */
+// We prepend CLONE_COUNT clones from the END, and append CLONE_COUNT from the START
+// So: [last CLONE_COUNT items] [all real items] [first CLONE_COUNT items]
+const CLONE_COUNT = 3;
+
+/* ─── CONFIG ────────────────────────────────────────────────────── */
+const CFG = {
+  friction:         0.86,   // per-frame velocity decay
+  wheelMult:        0.55,   // wheel delta → velocity multiplier
+  maxVelocity:      45,     // cap px/frame
+  snapDuration:     0.9,
+  snapEase:         'power3.out',
+  barrelMax:        130,    // max bow in px (matches CSS --barrel-max)
+  barrelVelFactor:  2.2,    // velocity → distortion px multiplier
+  barrelLerp:       0.10,   // smoothing toward target distortion (slower = more dramatic hold)
+  barrelRelaxDur:   0.7,    // ease back to 0 on snap
+  listEaseDur:      0.8,
+  listEase:         'power2.inOut',
+  parallaxStr:      0.06,   // 0 = none, higher = stronger
+  imageGap:         20,     // px — matches CSS --gap
+  snapIdleMs:       150,    // ms of near-zero velocity before snap fires
+};
+
+/* ─── STATE ─────────────────────────────────────────────────────── */
+let velocity    = 0;
+let trackY      = 0;
+let currentD    = 0;     // current barrel/pincushion offset
+let activeReal  = 0;     // real project index (0–N-1)
+let isSnapping  = false;
+let scrolling   = false; // true only after wheel input; cleared after snap completes
+let snapTimer   = null;
+let metrics     = [];    // per-slide {el, imgEl, realIndex or null for clone}
+let SLIDE_H     = { active: 0, inactive: 0 }; // precomputed — immune to CSS transitions
+
+/* ─── DOM REFS ──────────────────────────────────────────────────── */
+const filmTrack   = document.getElementById('filmTrack');
+const filmClipper = document.getElementById('filmClipper');
+const leftTrack   = document.getElementById('leftTrack');
+const rightTrack  = document.getElementById('rightTrack');
+const clipEl      = document.getElementById('filmClipPath');
+
+/* ════════════════════════════════════════════════════════════════════
+   BUILD DOM
+   ════════════════════════════════════════════════════════════════════ */
+function buildDOM() {
+  // ── Build left list (sub-project names)
+  PROJECTS.forEach((p, i) => {
+    const item = document.createElement('div');
+    item.className = `list__item${i === 0 ? ' is-active' : ''}`;
+    item.dataset.realIndex = i;
+    item.textContent = p.name;
+    leftTrack.appendChild(item);
+  });
+
+  // ── Build right list (category names)
+  CATEGORIES.forEach(cat => {
+    const item = document.createElement('div');
+    item.className = `list__item${cat === PROJECTS[0].category ? ' is-active' : ''}`;
+    item.dataset.category = cat;
+    item.textContent = cat;
+    rightTrack.appendChild(item);
+  });
+
+  // ── Build slides: [clones-top] [real items] [clones-bottom]
+  const allItems = [];
+
+  // Prepend: last CLONE_COUNT real items (as clones)
+  for (let c = CLONE_COUNT; c >= 1; c--) {
+    const realIdx = (N - c + N) % N;
+    allItems.push({ realIndex: realIdx, isClone: true });
+  }
+  // Real items
+  for (let i = 0; i < N; i++) {
+    allItems.push({ realIndex: i, isClone: false });
+  }
+  // Append: first CLONE_COUNT real items (as clones)
+  for (let c = 0; c < CLONE_COUNT; c++) {
+    allItems.push({ realIndex: c % N, isClone: true });
+  }
+
+  allItems.forEach((item, domIdx) => {
+    const p     = PROJECTS[item.realIndex];
+    const isAct = !item.isClone && item.realIndex === 0;
+
+    const slide = document.createElement('div');
+    slide.className = `slide ${isAct ? 'slide--active' : 'slide--inactive'}`;
+    slide.dataset.domIndex  = domIdx;
+    slide.dataset.realIndex = item.realIndex;
+
+    const img = document.createElement('img');
+    img.className = 'slide__img';
+    img.src = p.img;
+    img.alt = p.name;
+    img.loading = domIdx <= CLONE_COUNT + 1 ? 'eager' : 'lazy';
+
+    slide.appendChild(img);
+    filmTrack.appendChild(slide);
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   MEASURE
+   ════════════════════════════════════════════════════════════════════ */
+function measure() {
+  metrics = [];
+  filmTrack.querySelectorAll('.slide').forEach((el) => {
+    metrics.push({
+      el,
+      imgEl:     el.querySelector('.slide__img'),
+      realIndex: parseInt(el.dataset.realIndex),
+    });
+  });
+}
+
+// The DOM index where the real item 0 starts (= CLONE_COUNT)
+function realStart() { return CLONE_COUNT; }
+
+/* Precompute active/inactive heights once (and on resize).
+   Uses throw-away elements with transition disabled so we always
+   get the final intended height, never a mid-transition value. */
+function precomputeHeights() {
+  function measureClass(cls) {
+    const div = document.createElement('div');
+    div.className = `slide ${cls}`;
+    div.style.cssText = 'position:absolute;visibility:hidden;transition:none;pointer-events:none;';
+    document.body.appendChild(div);
+    const h = div.getBoundingClientRect().height;
+    document.body.removeChild(div);
+    return h;
+  }
+  SLIDE_H.active   = measureClass('slide--active');
+  SLIDE_H.inactive = measureClass('slide--inactive');
+}
+
+// Get target trackY so DOM slide [domIdx] is centered in viewport.
+// Uses precomputed heights — immune to CSS transition intermediate values.
+function getTargetY(domIdx) {
+  const viewH = filmClipper.offsetHeight;
+  let offset = 0;
+  for (let i = 0; i < domIdx; i++) {
+    const h = metrics[i].realIndex === activeReal ? SLIDE_H.active : SLIDE_H.inactive;
+    offset += h + CFG.imageGap;
+  }
+  const slideH = metrics[domIdx].realIndex === activeReal ? SLIDE_H.active : SLIDE_H.inactive;
+  return -(offset + slideH / 2 - viewH / 2);
+}
+
+// Find which DOM index is closest to current trackY
+function findNearest() {
+  let best = realStart(), bestDist = Infinity;
+  for (let i = 0; i < metrics.length; i++) {
+    const dist = Math.abs(getTargetY(i) - trackY);
+    if (dist < bestDist) { bestDist = dist; best = i; }
+  }
+  return best;
+}
+
+// Convert dom index → real index
+function domToReal(domIdx) {
+  return metrics[domIdx].realIndex;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   SVG CLIP-PATH  (barrel d>0, pincushion d<0)
+
+   The clipper element is (active-w + 2×barrelMax) wide.
+   At rest the clip-path shows the central active-w strip.
+   d drives how much the sides bow in/out.
+   ════════════════════════════════════════════════════════════════════ */
+const BARREL_MAX = CFG.barrelMax;
+
+function updateClipPath(d) {
+  const W = filmClipper.offsetWidth;
+  const H = filmClipper.offsetHeight;
+  if (!W || !H) return;
+
+  // Clamp
+  d = Math.max(-BARREL_MAX, Math.min(BARREL_MAX, d));
+
+  // Margin at rest (how far in from each side the clip sits)
+  const margin = BARREL_MAX;
+
+  // Corners (fixed, don't move with distortion)
+  const x0 = margin;
+  const x1 = W - margin;
+
+  // Midpoint bow:
+  // Barrel (d > 0): left bows LEFT (x0-d), right bows RIGHT (x1+d) → lens shape
+  // Pincushion (d < 0): left bows RIGHT (x0-d = x0+|d|), right bows LEFT (x1+d = x1-|d|) → hourglass
+  const xL = x0 - d;
+  const xR = x1 + d;
+
+  // Top/bottom edges stay perfectly straight — only left/right bow.
+  // (Adding cy here caused the "wavy" effect on the image tops/bottoms.)
+  const path = [
+    // Start top-left corner
+    `M ${x0},0`,
+    // Top edge → top-right corner (straight line via coincident control points)
+    `C ${x0 + (x1-x0)*0.33},0`,
+    `  ${x0 + (x1-x0)*0.66},0`,
+    `  ${x1},0`,
+    // Right edge → bottom-right (bows right for barrel, left for pincushion)
+    `C ${xR},${H*0.33}`,
+    `  ${xR},${H*0.66}`,
+    `  ${x1},${H}`,
+    // Bottom edge → bottom-left (straight line)
+    `C ${x0 + (x1-x0)*0.66},${H}`,
+    `  ${x0 + (x1-x0)*0.33},${H}`,
+    `  ${x0},${H}`,
+    // Left edge → top-left (bows left for barrel, right for pincushion)
+    `C ${xL},${H*0.66}`,
+    `  ${xL},${H*0.33}`,
+    `  ${x0},0`,
+    `Z`,
+  ].join(' ');
+
+  clipEl.setAttribute('d', path);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   ACTIVE STATE
+   ════════════════════════════════════════════════════════════════════ */
+function setActive(realIdx) {
+  if (realIdx === activeReal) return;
+  activeReal = realIdx;
+  refreshActiveClasses();
+}
+
+function refreshActiveClasses() {
+  // Slides — mark all DOM slides matching the active real index
+  filmTrack.querySelectorAll('.slide').forEach(s => {
+    const isAct = parseInt(s.dataset.realIndex) === activeReal;
+    s.classList.toggle('slide--active',   isAct);
+    s.classList.toggle('slide--inactive', !isAct);
+  });
+
+  // Left list
+  leftTrack.querySelectorAll('.list__item').forEach(item => {
+    item.classList.toggle('is-active', parseInt(item.dataset.realIndex) === activeReal);
+  });
+
+  // Right list
+  const activeCat = PROJECTS[activeReal].category;
+  rightTrack.querySelectorAll('.list__item').forEach(item => {
+    item.classList.toggle('is-active', item.dataset.category === activeCat);
+  });
+
+  // Scroll lists
+  const leftActive = leftTrack.querySelector(`[data-real-index="${activeReal}"]`);
+  scrollListTo(leftTrack, leftActive);
+
+  const rightActive = rightTrack.querySelector(`[data-category="${activeCat}"]`);
+  scrollListTo(rightTrack, rightActive);
+}
+
+function scrollListTo(track, activeEl) {
+  if (!activeEl) return;
+  const parentH = track.parentElement.offsetHeight;
+  const y = parentH / 2 - activeEl.offsetTop - activeEl.offsetHeight / 2;
+  gsap.to(track, { y, duration: CFG.listEaseDur, ease: CFG.listEase, overwrite: true });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   PARALLAX
+   ════════════════════════════════════════════════════════════════════ */
+function applyParallax() {
+  metrics.forEach((m, i) => {
+    const slideCenter = getTargetY(i);     // where this slide would be if centered
+    const offset      = (slideCenter - trackY) * CFG.parallaxStr;
+    const clamped     = Math.max(-5, Math.min(5, offset));
+    gsap.set(m.imgEl, { y: `${-10 + clamped}%` });
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   SNAP + INFINITE LOOP
+   ════════════════════════════════════════════════════════════════════ */
+function snap() {
+  if (isSnapping) return;
+  isSnapping = true;
+  velocity   = 0;
+
+  const targetDom = findNearest();
+  const realIdx   = domToReal(targetDom);
+
+  // Commit the new active state NOW — before computing snapY so that
+  // getTargetY uses the correct (final) SLIDE_H for the incoming active slide.
+  setActive(realIdx);
+
+  const snapY = getTargetY(targetDom);
+
+  // Relax distortion
+  const distortObj = { d: currentD };
+  gsap.to(distortObj, {
+    d:        0,
+    duration: CFG.barrelRelaxDur,
+    ease:     'power2.out',
+    onUpdate() { currentD = distortObj.d; updateClipPath(currentD); },
+  });
+
+  // Animate to snap position
+  const trackObj = { y: trackY };
+  gsap.to(trackObj, {
+    y:        snapY,
+    duration: CFG.snapDuration,
+    ease:     CFG.snapEase,
+    onUpdate() {
+      trackY = trackObj.y;
+      gsap.set(filmTrack, { y: trackY });
+      applyParallax();
+    },
+    onComplete() {
+      isSnapping = false;
+      scrolling  = false;
+
+      // ── Infinite loop teleport (invisible since content is identical)
+      const totalDom  = metrics.length;
+      const realFirst = CLONE_COUNT;
+      const realLast  = CLONE_COUNT + N - 1;
+      const cloneBot  = totalDom - CLONE_COUNT;
+
+      let finalDom = targetDom;
+      if (targetDom < realFirst) {
+        finalDom = realLast - (realFirst - 1 - targetDom);
+      } else if (targetDom > realLast) {
+        finalDom = realFirst + (targetDom - cloneBot);
+      }
+
+      // Always pin to exact center — corrects any rounding drift and handles teleport
+      trackY = getTargetY(finalDom);
+      gsap.set(filmTrack, { y: trackY });
+    },
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   RAF LOOP
+   ════════════════════════════════════════════════════════════════════ */
+function tick() {
+  requestAnimationFrame(tick);
+  if (isSnapping) return;
+
+  // Apply friction
+  velocity *= CFG.friction;
+  trackY   += velocity;
+
+  // Soft clamp at ends (gives slight resistance before snapping back)
+  const minY = getTargetY(metrics.length - 1) - 100;
+  const maxY = getTargetY(0) + 100;
+  if (trackY < minY) { trackY = minY; velocity *= -0.3; }
+  if (trackY > maxY) { trackY = maxY; velocity *= -0.3; }
+
+  gsap.set(filmTrack, { y: trackY });
+
+  // Barrel/pincushion
+  const targetD = -velocity * CFG.barrelVelFactor;
+  currentD += (targetD - currentD) * CFG.barrelLerp;
+  if (Math.abs(currentD) > 0.5) updateClipPath(currentD);
+
+  // Parallax
+  applyParallax();
+
+  // Snap trigger — only arm if the user actually scrolled (prevents idle re-snap loop)
+  if (scrolling && Math.abs(velocity) < 0.3) {
+    clearTimeout(snapTimer);
+    snapTimer = setTimeout(snap, CFG.snapIdleMs);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   WHEEL
+   ════════════════════════════════════════════════════════════════════ */
+function initWheel() {
+  window.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (isSnapping) return;
+    scrolling = true;   // ← user is actively scrolling; re-arm snap timer
+    clearTimeout(snapTimer);
+
+    let delta = e.deltaY;
+    if (e.deltaMode === 1) delta *= 28;
+    if (e.deltaMode === 2) delta *= 500;
+
+    velocity -= delta * CFG.wheelMult;
+    velocity  = Math.max(-CFG.maxVelocity, Math.min(CFG.maxVelocity, velocity));
+  }, { passive: false });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   SIZE CLIPPER & CLIP PATH
+   ════════════════════════════════════════════════════════════════════ */
+function sizeClipper() {
+  // Width/height set in CSS (active-w + 2*barrel-max × 100vh)
+  // Just draw the resting clip-path
+  updateClipPath(0);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   INIT
+   ════════════════════════════════════════════════════════════════════ */
+function init() {
+  buildDOM();
+
+  requestAnimationFrame(() => {
+    measure();
+    precomputeHeights();   // must run after measure() so SLIDE_H is ready for getTargetY
+    sizeClipper();
+
+    // Start centered on the first REAL item (DOM index = CLONE_COUNT)
+    trackY = getTargetY(realStart());
+    gsap.set(filmTrack, { y: trackY });
+
+    // Init list positions
+    refreshActiveClasses();
+
+    // Start loop + wheel
+    tick();
+    initWheel();
+
+    window.addEventListener('resize', () => {
+      measure();
+      precomputeHeights();
+      sizeClipper();
+      trackY = getTargetY(
+        realStart() + activeReal   // re-center on current real item
+      );
+      velocity = 0;
+      gsap.set(filmTrack, { y: trackY });
+    });
+  });
+}
+
+init();

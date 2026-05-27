@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kharche</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <span class="nav__brand">Kharche</span>
+    <span class="nav__sub">Selected Work</span>
+  </nav>
+
+  <!-- MAIN GALLERY -->
+  <main class="gallery">
+
+    <!-- LEFT LIST (sub-projects / children) -->
+    <aside class="list list--left" aria-label="Projects">
+      <div class="list__track" id="leftTrack">
+        <!-- JS populated -->
+      </div>
+    </aside>
+
+    <!-- CENTER FILMSTRIP -->
+    <section class="filmstrip" aria-label="Gallery">
+      <!-- SVG clip-path definition -->
+      <svg class="clip-svg" width="0" height="0" aria-hidden="true">
+        <defs>
+          <clipPath id="filmClip" clipPathUnits="userSpaceOnUse">
+            <path id="filmClipPath" />
+          </clipPath>
+        </defs>
+      </svg>
+
+      <!-- The clipped container -->
+      <div class="filmstrip__clipper" id="filmClipper">
+        <div class="filmstrip__track" id="filmTrack">
+          <!-- JS populated -->
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT LIST (parent categories) -->
+    <aside class="list list--right" aria-label="Categories">
+      <div class="list__track" id="rightTrack">
+        <!-- JS populated -->
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- LIBRARIES -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
