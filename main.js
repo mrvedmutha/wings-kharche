@@ -35,12 +35,13 @@ const CFG = {
   snapDuration:     0.9,
   snapEase:         'power3.out',
   barrelMax:        130,    // max bow in px (matches CSS --barrel-max)
-  barrelVelFactor:  2.2,    // velocity → distortion px multiplier
-  barrelLerp:       0.10,   // smoothing toward target distortion (slower = more dramatic hold)
+  barrelCurve:      1.8,    // power exponent: >1 = slow scroll barely distorts, fast scroll hits max hard
+  barrelLerp:       0.14,   // smoothing toward target distortion
   barrelRelaxDur:   0.7,    // ease back to 0 on snap
   listEaseDur:      0.8,
   listEase:         'power2.inOut',
-  parallaxStr:      0.06,   // 0 = none, higher = stronger
+  parallaxStr:      0.025,  // raw pixel-distance multiplier — keep tiny
+  parallaxLerp:     0.05,   // per-frame smoothing toward target (lower = more lag = silkier)
   imageGap:         20,     // px — matches CSS --gap
   snapIdleMs:       150,    // ms of near-zero velocity before snap fires
 };
@@ -55,6 +56,7 @@ let scrolling   = false; // true only after wheel input; cleared after snap comp
 let snapTimer   = null;
 let metrics     = [];    // per-slide {el, imgEl, realIndex or null for clone}
 let SLIDE_H     = { active: 0, inactive: 0 }; // precomputed — immune to CSS transitions
+let parallaxY   = [];    // per-slide smoothed parallax offset (%), lerped each frame
 
 /* ─── DOM REFS ──────────────────────────────────────────────────── */
 const filmTrack   = document.getElementById('filmTrack');
@@ -134,6 +136,7 @@ function measure() {
       realIndex: parseInt(el.dataset.realIndex),
     });
   });
+  parallaxY = new Array(metrics.length).fill(0);
 }
 
 // The DOM index where the real item 0 starts (= CLONE_COUNT)
@@ -289,10 +292,16 @@ function scrollListTo(track, activeEl) {
    ════════════════════════════════════════════════════════════════════ */
 function applyParallax() {
   metrics.forEach((m, i) => {
-    const slideCenter = getTargetY(i);     // where this slide would be if centered
-    const offset      = (slideCenter - trackY) * CFG.parallaxStr;
-    const clamped     = Math.max(-5, Math.min(5, offset));
-    gsap.set(m.imgEl, { y: `${-10 + clamped}%` });
+    // How far this slide's ideal center is from the current track position.
+    // Multiplied by a tiny factor and clamped so the range stays very small.
+    const slideCenter = getTargetY(i);
+    const raw    = (slideCenter - trackY) * CFG.parallaxStr;
+    const target = Math.max(-3.5, Math.min(3.5, raw));  // ±3.5% max travel
+
+    // Lerp the stored value toward the target — gives a silky, floating feel
+    parallaxY[i] += (target - parallaxY[i]) * CFG.parallaxLerp;
+
+    gsap.set(m.imgEl, { y: `${-10 + parallaxY[i]}%` });
   });
 }
 
@@ -376,8 +385,12 @@ function tick() {
 
   gsap.set(filmTrack, { y: trackY });
 
-  // Barrel/pincushion
-  const targetD = -velocity * CFG.barrelVelFactor;
+  // Barrel/pincushion — power-curved: slow = barely any distortion, fast = full max
+  // normV ∈ [-1, 1], then raise to barrelCurve so small values stay near 0
+  // and the full BARREL_MAX is only reached at max velocity.
+  const normV   = Math.max(-1, Math.min(1, velocity / CFG.maxVelocity));
+  const curved  = Math.sign(normV) * Math.pow(Math.abs(normV), CFG.barrelCurve);
+  const targetD = -curved * BARREL_MAX;
   currentD += (targetD - currentD) * CFG.barrelLerp;
   if (Math.abs(currentD) > 0.5) updateClipPath(currentD);
 
