@@ -135,9 +135,9 @@ html, body {
   flex-shrink: 0;
   overflow: hidden;
   position: relative;
-  /* Height transitions smoothly — snap math uses precomputed SLIDE_H, never live DOM heights,
-     so CSS transitions here are safe and purely cosmetic. */
-  transition: height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  /* No CSS height transition — height is driven entirely by JS (visualH lerp in tick)
+     so position math and visual are always identical. CSS transition caused a 500ms
+     mismatch between buildPositions() and the actual rendered height. */
 }
 
 .slide--active {

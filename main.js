@@ -57,8 +57,9 @@ let isSnapping  = false;
 let scrolling   = false; // true only after wheel input; cleared after snap completes
 let snapTimer   = null;
 let metrics     = [];    // per-slide {el, imgEl, realIndex or null for clone}
-let SLIDE_H     = { active: 0, inactive: 0 }; // precomputed — immune to CSS transitions
+let SLIDE_H     = { active: 0, inactive: 0 }; // final heights from CSS (never read mid-transition)
 let parallaxY   = [];    // per-slide smoothed parallax offset (%), lerped each frame
+let visualH     = [];    // per real-project index: current lerped height driving DOM + buildPositions
 
 /* ─── DOM REFS ──────────────────────────────────────────────────── */
 const filmTrack   = document.getElementById('filmTrack');
@@ -185,7 +186,8 @@ function buildPositions() {
   const viewH = filmClipper.offsetHeight;
   let offset  = 0;
   for (let i = 0; i < metrics.length; i++) {
-    const h    = metrics[i].realIndex === activeReal ? SLIDE_H.active : SLIDE_H.inactive;
+    // Use the live lerped visual height — always matches what's rendered on screen
+    const h    = visualH[metrics[i].realIndex] ?? SLIDE_H.inactive;
     posCache[i] = -(offset + h / 2 - viewH / 2);
     offset     += h + CFG.imageGap;
   }
@@ -398,6 +400,29 @@ function tick() {
   velocity *= CFG.friction;
   trackY   += velocity;
 
+  // ── LERP VISUAL HEIGHTS ───────────────────────────────────────────
+  // Each real-project index has a current visual height that smoothly
+  // lerps toward its target (active or inactive). This drives BOTH the
+  // DOM inline style AND buildPositions(), so they are always identical —
+  // eliminating the CSS-transition mismatch that caused the glitch.
+  let heightsDirty = false;
+  for (let r = 0; r < N; r++) {
+    const target = r === activeReal ? SLIDE_H.active : SLIDE_H.inactive;
+    const diff   = target - visualH[r];
+    if (Math.abs(diff) > 0.2) {
+      visualH[r] += diff * 0.10;
+      heightsDirty = true;
+    } else if (visualH[r] !== target) {
+      visualH[r]  = target;
+      heightsDirty = true;
+    }
+  }
+  if (heightsDirty) {
+    for (let i = 0; i < metrics.length; i++) {
+      metrics[i].el.style.height = visualH[metrics[i].realIndex] + 'px';
+    }
+  }
+
   // ── Build all positions ONCE this frame — O(n) total instead of O(n²)
   let pos = buildPositions();
 
@@ -482,7 +507,11 @@ function init() {
 
   requestAnimationFrame(() => {
     measure();
-    precomputeHeights();   // must run after measure() so SLIDE_H is ready for getTargetY
+    precomputeHeights();
+    // Initialise visualH to final heights (no transition on load)
+    visualH = Array.from({ length: N }, (_, r) =>
+      r === activeReal ? SLIDE_H.active : SLIDE_H.inactive
+    );
     sizeClipper();
 
     // Start centered on the first REAL item (DOM index = CLONE_COUNT)
@@ -499,10 +528,11 @@ function init() {
     window.addEventListener('resize', () => {
       measure();
       precomputeHeights();
-      sizeClipper();
-      trackY = getTargetY(
-        realStart() + activeReal   // re-center on current real item
+      visualH = Array.from({ length: N }, (_, r) =>
+        r === activeReal ? SLIDE_H.active : SLIDE_H.inactive
       );
+      sizeClipper();
+      trackY = getTargetY(realStart() + activeReal);
       velocity = 0;
       gsap.set(filmTrack, { y: trackY });
     });
