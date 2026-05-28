@@ -27,8 +27,9 @@
       </div>
     </aside>
 
-    <!-- CENTER DRUM -->
-    <section class="drum-scene" aria-label="Gallery">
+    <!-- CENTER FILMSTRIP -->
+    <section class="filmstrip" aria-label="Gallery">
+      <!-- SVG clip-path definition -->
       <svg class="clip-svg" width="0" height="0" aria-hidden="true">
         <defs>
           <clipPath id="filmClip" clipPathUnits="userSpaceOnUse">
@@ -36,8 +37,10 @@
           </clipPath>
         </defs>
       </svg>
-      <div class="drum-clipper" id="filmClipper">
-        <div class="drum" id="drum">
+
+      <!-- The clipped container -->
+      <div class="filmstrip__clipper" id="filmClipper">
+        <div class="filmstrip__track" id="filmTrack">
           <!-- JS populated -->
         </div>
       </div>

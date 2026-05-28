@@ -1,9 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════
-   KHARCHE — Drum Gallery
-   - Wheel → angular velocity → 3D cylinder rotation
-   - SVG clip-path: barrel (scroll down) / pincushion (scroll up)
-   - True infinite loop: drum just keeps rotating, no clones/teleport
-   - Side lists auto-centre via GSAP
+   KHARCHE — Scroll Gallery  v2
+   - Wheel → velocity → RAF momentum
+   - SVG clip-path: barrel (forward) / pincushion (backward)
+   - Infinite loop via clones
+   - Parallax (subtle)
+   - List auto-centering via GSAP
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ─── DATA ──────────────────────────────────────────────────────── */
@@ -18,43 +19,49 @@ const PROJECTS = [
   { category: 'Landscape', name: 'Coastline',   img: 'assets/pexels-who0ne-36197805.jpg' },
   { category: 'Portrait',  name: 'Closeup',     img: 'assets/pexels-robert-sliwinski-2155126657-37011539.jpg' },
 ];
-const N          = PROJECTS.length;
+const N         = PROJECTS.length;
 const CATEGORIES = [...new Set(PROJECTS.map(p => p.category))];
-const ITEM_ANGLE = 360 / N;   // degrees each slot occupies on the drum
+
+/* ─── CLONE CONFIG ──────────────────────────────────────────────── */
+// We prepend CLONE_COUNT clones from the END, and append CLONE_COUNT from the START
+// So: [last CLONE_COUNT items] [all real items] [first CLONE_COUNT items]
+const CLONE_COUNT = 3;
 
 /* ─── CONFIG ────────────────────────────────────────────────────── */
 const CFG = {
-  friction:         0.88,
-  wheelMult:        0.018,    // wheel delta → angular velocity (deg/frame)
-  maxAngVelocity:   10,       // deg/frame cap
+  friction:         0.86,   // per-frame velocity decay
+  wheelMult:        0.55,   // wheel delta → velocity multiplier
+  maxVelocity:      45,     // cap px/frame
   snapDuration:     1.0,
   snapEase:         'power2.inOut',
-  barrelMax:        130,
-  barrelCurve:      1.8,      // power exponent for velocity → distortion curve
-  barrelLerp:       0.14,
-  barrelRelaxDur:   0.7,
-  magnetThreshold:  1.2,      // deg/frame: below this, slot-machine pull activates
-  magnetStrength:   0.12,
+  barrelMax:        130,    // max bow in px (matches CSS --barrel-max)
+  barrelCurve:      1.8,    // power exponent: >1 = slow scroll barely distorts, fast scroll hits max hard
+  barrelLerp:       0.14,   // smoothing toward target distortion
+  barrelRelaxDur:   0.7,    // ease back to 0 on snap
+  magnetThreshold:  12,     // velocity (px/frame) below which slot-machine mode activates
+  magnetStrength:   0.10,   // attraction pull per frame toward nearest center
   listEaseDur:      0.8,
   listEase:         'power2.inOut',
-  itemGap:          30,       // extra arc-gap between items (px)
-  snapIdleMs:       100,
+  parallaxStr:      0.025,  // raw pixel-distance multiplier — keep tiny
+  parallaxLerp:     0.05,   // per-frame smoothing toward target (lower = more lag = silkier)
+  imageGap:         20,     // px — matches CSS --gap
+  snapIdleMs:       150,    // ms of near-zero velocity before snap fires
 };
 
 /* ─── STATE ─────────────────────────────────────────────────────── */
-let drumAngle   = 0;     // cumulative drum rotation in degrees
-let angVelocity = 0;     // degrees per frame
-let currentD    = 0;     // current barrel/pincushion distortion
-let activeReal  = 0;
+let velocity    = 0;
+let trackY      = 0;
+let currentD    = 0;     // current barrel/pincushion offset
+let activeReal  = 0;     // real project index (0–N-1)
 let isSnapping  = false;
-let scrolling   = false;
+let scrolling   = false; // true only after wheel input; cleared after snap completes
 let snapTimer   = null;
-let metrics     = [];    // { el, imgEl, realIndex }
-let RADIUS      = 0;     // drum cylinder radius in px
-let ITEM_H      = 0;     // measured height of one drum item
+let metrics     = [];    // per-slide {el, imgEl, realIndex or null for clone}
+let SLIDE_H     = { active: 0, inactive: 0 }; // precomputed — immune to CSS transitions
+let parallaxY   = [];    // per-slide smoothed parallax offset (%), lerped each frame
 
 /* ─── DOM REFS ──────────────────────────────────────────────────── */
-const drum        = document.getElementById('drum');
+const filmTrack   = document.getElementById('filmTrack');
 const filmClipper = document.getElementById('filmClipper');
 const leftTrack   = document.getElementById('leftTrack');
 const rightTrack  = document.getElementById('rightTrack');
@@ -64,97 +71,151 @@ const clipEl      = document.getElementById('filmClipPath');
    BUILD DOM
    ════════════════════════════════════════════════════════════════════ */
 function buildDOM() {
+  // ── Build left list (sub-project names)
   PROJECTS.forEach((p, i) => {
-    const li = document.createElement('div');
-    li.className = `list__item${i === 0 ? ' is-active' : ''}`;
-    li.dataset.realIndex = i;
-    li.textContent = p.name;
-    leftTrack.appendChild(li);
+    const item = document.createElement('div');
+    item.className = `list__item${i === 0 ? ' is-active' : ''}`;
+    item.dataset.realIndex = i;
+    item.textContent = p.name;
+    leftTrack.appendChild(item);
   });
 
+  // ── Build right list (category names)
   CATEGORIES.forEach(cat => {
-    const li = document.createElement('div');
-    li.className = `list__item${cat === PROJECTS[0].category ? ' is-active' : ''}`;
-    li.dataset.category = cat;
-    li.textContent = cat;
-    rightTrack.appendChild(li);
+    const item = document.createElement('div');
+    item.className = `list__item${cat === PROJECTS[0].category ? ' is-active' : ''}`;
+    item.dataset.category = cat;
+    item.textContent = cat;
+    rightTrack.appendChild(item);
   });
 
-  PROJECTS.forEach((p, i) => {
-    const el = document.createElement('div');
-    el.className = 'drum__item';
-    el.dataset.realIndex = i;
+  // ── Build slides: [clones-top] [real items] [clones-bottom]
+  const allItems = [];
+
+  // Prepend: last CLONE_COUNT real items (as clones)
+  for (let c = CLONE_COUNT; c >= 1; c--) {
+    const realIdx = (N - c + N) % N;
+    allItems.push({ realIndex: realIdx, isClone: true });
+  }
+  // Real items
+  for (let i = 0; i < N; i++) {
+    allItems.push({ realIndex: i, isClone: false });
+  }
+  // Append: first CLONE_COUNT real items (as clones)
+  for (let c = 0; c < CLONE_COUNT; c++) {
+    allItems.push({ realIndex: c % N, isClone: true });
+  }
+
+  allItems.forEach((item, domIdx) => {
+    const p     = PROJECTS[item.realIndex];
+    const isAct = !item.isClone && item.realIndex === 0;
+
+    const slide = document.createElement('div');
+    slide.className = `slide ${isAct ? 'slide--active' : 'slide--inactive'}`;
+    slide.dataset.domIndex  = domIdx;
+    slide.dataset.realIndex = item.realIndex;
 
     const img = document.createElement('img');
-    img.className = 'drum__img';
+    img.className = 'slide__img';
     img.src = p.img;
     img.alt = p.name;
-    img.loading = i < 3 ? 'eager' : 'lazy';
+    img.loading = domIdx <= CLONE_COUNT + 1 ? 'eager' : 'lazy';
 
-    el.appendChild(img);
-    drum.appendChild(el);
-    metrics.push({ el, imgEl: img, realIndex: i });
+    slide.appendChild(img);
+    filmTrack.appendChild(slide);
   });
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   GEOMETRY
+   MEASURE
    ════════════════════════════════════════════════════════════════════ */
-function measureItemHeight() {
-  const div = document.createElement('div');
-  div.className = 'drum__item';
-  div.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;';
-  document.body.appendChild(div);
-  ITEM_H = div.getBoundingClientRect().height;
-  document.body.removeChild(div);
-}
-
-function computeRadius() {
-  // Arc spacing per item = height + gap.
-  // Full circumference = N × spacing → radius = circumference / 2π
-  RADIUS = ((ITEM_H + CFG.itemGap) * N) / (2 * Math.PI);
-}
-
-// Place each item at its fixed slot on the cylinder surface.
-// The drum container's rotateX then spins the whole thing.
-function placeItems() {
-  metrics.forEach((m, i) => {
-    m.el.style.transform = `rotateX(${i * ITEM_ANGLE}deg) translateZ(${RADIUS}px)`;
+function measure() {
+  metrics = [];
+  filmTrack.querySelectorAll('.slide').forEach((el) => {
+    metrics.push({
+      el,
+      imgEl:     el.querySelector('.slide__img'),
+      realIndex: parseInt(el.dataset.realIndex),
+    });
   });
+  parallaxY = new Array(metrics.length).fill(0);
+}
+
+// The DOM index where the real item 0 starts (= CLONE_COUNT)
+function realStart() { return CLONE_COUNT; }
+
+/* Precompute active/inactive heights once (and on resize).
+   Uses throw-away elements with transition disabled so we always
+   get the final intended height, never a mid-transition value. */
+function precomputeHeights() {
+  function measureClass(cls) {
+    const div = document.createElement('div');
+    div.className = `slide ${cls}`;
+    div.style.cssText = 'position:absolute;visibility:hidden;transition:none;pointer-events:none;';
+    document.body.appendChild(div);
+    const h = div.getBoundingClientRect().height;
+    document.body.removeChild(div);
+    return h;
+  }
+  SLIDE_H.active   = measureClass('slide--active');
+  SLIDE_H.inactive = measureClass('slide--inactive');
+}
+
+// Get target trackY so DOM slide [domIdx] is centered in viewport.
+// Uses precomputed heights — immune to CSS transition intermediate values.
+function getTargetY(domIdx) {
+  const viewH = filmClipper.offsetHeight;
+  let offset = 0;
+  for (let i = 0; i < domIdx; i++) {
+    const h = metrics[i].realIndex === activeReal ? SLIDE_H.active : SLIDE_H.inactive;
+    offset += h + CFG.imageGap;
+  }
+  const slideH = metrics[domIdx].realIndex === activeReal ? SLIDE_H.active : SLIDE_H.inactive;
+  return -(offset + slideH / 2 - viewH / 2);
+}
+
+// Pre-allocated positions cache — reused every frame to avoid GC churn
+let posCache = [];
+
+// Build all center-Y values in ONE O(n) pass.
+// getTargetY(i) is O(n) itself, so calling it n times = O(n²).
+// This replaces that pattern everywhere in the hot RAF loop.
+function buildPositions() {
+  if (posCache.length !== metrics.length) posCache = new Array(metrics.length);
+  const viewH = filmClipper.offsetHeight;
+  let offset  = 0;
+  for (let i = 0; i < metrics.length; i++) {
+    const h    = metrics[i].realIndex === activeReal ? SLIDE_H.active : SLIDE_H.inactive;
+    posCache[i] = -(offset + h / 2 - viewH / 2);
+    offset     += h + CFG.imageGap;
+  }
+  return posCache;
+}
+
+// Find which DOM index is closest to current trackY.
+// Accepts a pre-built positions array (fast path from tick);
+// builds its own if called cold (e.g. from snap).
+function findNearest(pos) {
+  if (!pos) pos = buildPositions();
+  let best = realStart(), bestDist = Infinity;
+  for (let i = 0; i < metrics.length; i++) {
+    const dist = Math.abs(pos[i] - trackY);
+    if (dist < bestDist) { bestDist = dist; best = i; }
+  }
+  return best;
+}
+
+// Convert dom index → real index
+function domToReal(domIdx) {
+  return metrics[domIdx].realIndex;
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   DRUM RENDER
-   ════════════════════════════════════════════════════════════════════ */
-// translateZ(-RADIUS) shifts the whole drum back so the front item
-// sits at Z = 0 (no perspective magnification). Items going around
-// the back naturally end up at negative Z → appear smaller.
-function renderDrum() {
-  drum.style.transform = `translateZ(-${RADIUS}px) rotateX(${drumAngle}deg)`;
+   SVG CLIP-PATH  (barrel d>0, pincushion d<0)
 
-  metrics.forEach((m, i) => {
-    // Angular distance from this item to the current front-facing direction.
-    let diff = ((i * ITEM_ANGLE - drumAngle) % 360 + 360) % 360;
-    if (diff > 180) diff -= 360;              // range –180 … +180
-    // cos: 1 at front, 0 at 90°, negative at back → clamp to 0
-    m.el.style.opacity = Math.max(0, Math.cos(diff * Math.PI / 180));
-  });
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   HELPERS — angle ↔ real index
-   ════════════════════════════════════════════════════════════════════ */
-function angleToReal(angle) {
-  const idx = Math.round(angle / ITEM_ANGLE);
-  return ((idx % N) + N) % N;
-}
-
-function nearestSnap(angle) {
-  return Math.round(angle / ITEM_ANGLE) * ITEM_ANGLE;
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   SVG CLIP-PATH  (barrel d>0 = scroll down, pincushion d<0 = scroll up)
+   The clipper element is (active-w + 2×barrelMax) wide.
+   At rest the clip-path shows the central active-w strip.
+   d drives how much the sides bow in/out.
    ════════════════════════════════════════════════════════════════════ */
 const BARREL_MAX = CFG.barrelMax;
 
@@ -162,61 +223,127 @@ function updateClipPath(d) {
   const W = filmClipper.offsetWidth;
   const H = filmClipper.offsetHeight;
   if (!W || !H) return;
+
+  // Clamp
   d = Math.max(-BARREL_MAX, Math.min(BARREL_MAX, d));
+
+  // Margin at rest (how far in from each side the clip sits)
   const margin = BARREL_MAX;
-  const x0 = margin, x1 = W - margin;
-  const xL = x0 - d, xR = x1 + d;
+
+  // Corners (fixed, don't move with distortion)
+  const x0 = margin;
+  const x1 = W - margin;
+
+  // Midpoint bow:
+  // Barrel (d > 0): left bows LEFT (x0-d), right bows RIGHT (x1+d) → lens shape
+  // Pincushion (d < 0): left bows RIGHT (x0-d = x0+|d|), right bows LEFT (x1+d = x1-|d|) → hourglass
+  const xL = x0 - d;
+  const xR = x1 + d;
+
+  // Top/bottom edges stay perfectly straight — only left/right bow.
+  // (Adding cy here caused the "wavy" effect on the image tops/bottoms.)
   const path = [
+    // Start top-left corner
     `M ${x0},0`,
-    `C ${x0+(x1-x0)*0.33},0  ${x0+(x1-x0)*0.66},0  ${x1},0`,
-    `C ${xR},${H*0.33}  ${xR},${H*0.66}  ${x1},${H}`,
-    `C ${x0+(x1-x0)*0.66},${H}  ${x0+(x1-x0)*0.33},${H}  ${x0},${H}`,
-    `C ${xL},${H*0.66}  ${xL},${H*0.33}  ${x0},0`,
+    // Top edge → top-right corner (straight line via coincident control points)
+    `C ${x0 + (x1-x0)*0.33},0`,
+    `  ${x0 + (x1-x0)*0.66},0`,
+    `  ${x1},0`,
+    // Right edge → bottom-right (bows right for barrel, left for pincushion)
+    `C ${xR},${H*0.33}`,
+    `  ${xR},${H*0.66}`,
+    `  ${x1},${H}`,
+    // Bottom edge → bottom-left (straight line)
+    `C ${x0 + (x1-x0)*0.66},${H}`,
+    `  ${x0 + (x1-x0)*0.33},${H}`,
+    `  ${x0},${H}`,
+    // Left edge → top-left (bows left for barrel, right for pincushion)
+    `C ${xL},${H*0.66}`,
+    `  ${xL},${H*0.33}`,
+    `  ${x0},0`,
     `Z`,
   ].join(' ');
+
   clipEl.setAttribute('d', path);
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   ACTIVE STATE + LISTS
+   ACTIVE STATE
    ════════════════════════════════════════════════════════════════════ */
 function setActive(realIdx) {
   if (realIdx === activeReal) return;
   activeReal = realIdx;
-  refreshLists();
+  refreshActiveClasses();
 }
 
-function refreshLists() {
+function refreshActiveClasses() {
+  // Slides — mark all DOM slides matching the active real index
+  filmTrack.querySelectorAll('.slide').forEach(s => {
+    const isAct = parseInt(s.dataset.realIndex) === activeReal;
+    s.classList.toggle('slide--active',   isAct);
+    s.classList.toggle('slide--inactive', !isAct);
+  });
+
+  // Left list
   leftTrack.querySelectorAll('.list__item').forEach(item => {
     item.classList.toggle('is-active', parseInt(item.dataset.realIndex) === activeReal);
   });
+
+  // Right list
   const activeCat = PROJECTS[activeReal].category;
   rightTrack.querySelectorAll('.list__item').forEach(item => {
     item.classList.toggle('is-active', item.dataset.category === activeCat);
   });
-  scrollListTo(leftTrack,  leftTrack.querySelector(`[data-real-index="${activeReal}"]`));
-  scrollListTo(rightTrack, rightTrack.querySelector(`[data-category="${activeCat}"]`));
+
+  // Scroll lists
+  const leftActive = leftTrack.querySelector(`[data-real-index="${activeReal}"]`);
+  scrollListTo(leftTrack, leftActive);
+
+  const rightActive = rightTrack.querySelector(`[data-category="${activeCat}"]`);
+  scrollListTo(rightTrack, rightActive);
 }
 
-function scrollListTo(track, el) {
-  if (!el) return;
+function scrollListTo(track, activeEl) {
+  if (!activeEl) return;
   const parentH = track.parentElement.offsetHeight;
-  const y = parentH / 2 - el.offsetTop - el.offsetHeight / 2;
+  const y = parentH / 2 - activeEl.offsetTop - activeEl.offsetHeight / 2;
   gsap.to(track, { y, duration: CFG.listEaseDur, ease: CFG.listEase, overwrite: true });
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   SNAP
+   PARALLAX
+   ════════════════════════════════════════════════════════════════════ */
+// pos is optional: pass the frame's pre-built array for O(1) lookups;
+// omit and it builds its own (used by snap's onUpdate).
+// Direct style.transform instead of gsap.set — avoids 15× GSAP overhead/frame.
+function applyParallax(pos) {
+  if (!pos) pos = buildPositions();
+  for (let i = 0; i < metrics.length; i++) {
+    const raw    = (pos[i] - trackY) * CFG.parallaxStr;
+    const target = Math.max(-3.5, Math.min(3.5, raw));
+    parallaxY[i] += (target - parallaxY[i]) * CFG.parallaxLerp;
+    metrics[i].imgEl.style.transform = `translateY(${-10 + parallaxY[i]}%)`;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   SNAP + INFINITE LOOP
    ════════════════════════════════════════════════════════════════════ */
 function snap() {
   if (isSnapping) return;
-  isSnapping  = true;
-  angVelocity = 0;
+  isSnapping = true;
+  velocity   = 0;
 
-  const targetAngle = nearestSnap(drumAngle);
-  setActive(angleToReal(targetAngle));
+  const targetDom = findNearest();
+  const realIdx   = domToReal(targetDom);
 
-  // Relax distortion back to neutral
+  // Commit the new active state NOW — before computing snapY so that
+  // getTargetY uses the correct (final) SLIDE_H for the incoming active slide.
+  setActive(realIdx);
+
+  const snapY = getTargetY(targetDom);
+
+  // Relax distortion
   const distortObj = { d: currentD };
   gsap.to(distortObj, {
     d:        0,
@@ -225,18 +352,37 @@ function snap() {
     onUpdate() { currentD = distortObj.d; updateClipPath(currentD); },
   });
 
-  // Rotate drum to snap position
-  const obj = { a: drumAngle };
-  gsap.to(obj, {
-    a:        targetAngle,
+  // Animate to snap position
+  const trackObj = { y: trackY };
+  gsap.to(trackObj, {
+    y:        snapY,
     duration: CFG.snapDuration,
     ease:     CFG.snapEase,
-    onUpdate()  { drumAngle = obj.a; renderDrum(); },
+    onUpdate() {
+      trackY = trackObj.y;
+      gsap.set(filmTrack, { y: trackY });
+      applyParallax();
+    },
     onComplete() {
-      drumAngle  = targetAngle;   // pin exactly — eliminates float drift
       isSnapping = false;
       scrolling  = false;
-      renderDrum();
+
+      // ── Infinite loop teleport (invisible since content is identical)
+      const totalDom  = metrics.length;
+      const realFirst = CLONE_COUNT;
+      const realLast  = CLONE_COUNT + N - 1;
+      const cloneBot  = totalDom - CLONE_COUNT;
+
+      let finalDom = targetDom;
+      if (targetDom < realFirst) {
+        finalDom = realLast - (realFirst - 1 - targetDom);
+      } else if (targetDom > realLast) {
+        finalDom = realFirst + (targetDom - cloneBot);
+      }
+
+      // Always pin to exact center — corrects any rounding drift and handles teleport
+      trackY = getTargetY(finalDom);
+      gsap.set(filmTrack, { y: trackY });
     },
   });
 }
@@ -248,29 +394,53 @@ function tick() {
   requestAnimationFrame(tick);
   if (isSnapping) return;
 
-  angVelocity *= CFG.friction;
-  drumAngle   += angVelocity;
+  // Apply friction
+  velocity *= CFG.friction;
+  trackY   += velocity;
 
-  const absV = Math.abs(angVelocity);
+  // ── Build all positions ONCE this frame — O(n) total instead of O(n²)
+  let pos = buildPositions();
 
-  // Slot-machine mode: gentle magnetic pull toward nearest + live active update
-  if (scrolling && absV < CFG.magnetThreshold) {
-    const target  = nearestSnap(drumAngle);
-    drumAngle    += (target - drumAngle) * CFG.magnetStrength;
-    const realIdx = angleToReal(drumAngle);
-    if (realIdx !== activeReal) setActive(realIdx);
+  // ── SEAMLESS LOOP ─────────────────────────────────────────────────
+  // Replace the old hard clamp with a continuous invisible teleport.
+  // One full loop = the Y distance from real item 0 to its bottom clone.
+  // If trackY drifts outside the real-item zone, shift by loopLen so
+  // the visual is identical but we're back inside the real zone.
+  // Fires every RAF frame → no jump is ever visible.
+  const loopLen = pos[CLONE_COUNT] - pos[CLONE_COUNT + N];  // always positive
+  if (trackY < pos[CLONE_COUNT + N - 1]) {
+    trackY += loopLen;   // scrolled past last real item → wrap to top clones
+  } else if (trackY > pos[CLONE_COUNT]) {
+    trackY -= loopLen;   // scrolled past first real item → wrap to bottom clones
   }
 
-  renderDrum();
+  const absV = Math.abs(velocity);
 
-  // Barrel/pincushion — power-curved so slow scrolls barely distort
-  const normV   = Math.max(-1, Math.min(1, angVelocity / CFG.maxAngVelocity));
+  // ── SLOT-MACHINE MODE ──────────────────────────────────────────────
+  if (scrolling && absV < CFG.magnetThreshold) {
+    const nearestDom  = findNearest(pos);
+    const nearestReal = domToReal(nearestDom);
+    if (nearestReal !== activeReal) {
+      setActive(nearestReal);
+      pos = buildPositions();  // recompute after height change
+    }
+    trackY += (pos[nearestDom] - trackY) * CFG.magnetStrength;
+  }
+
+  gsap.set(filmTrack, { y: trackY });
+
+  // Barrel/pincushion — power-curved
+  const normV   = Math.max(-1, Math.min(1, velocity / CFG.maxVelocity));
   const curved  = Math.sign(normV) * Math.pow(Math.abs(normV), CFG.barrelCurve);
-  currentD     += (-curved * BARREL_MAX - currentD) * CFG.barrelLerp;
+  const targetD = -curved * BARREL_MAX;
+  currentD += (targetD - currentD) * CFG.barrelLerp;
   if (Math.abs(currentD) > 0.5) updateClipPath(currentD);
 
-  // Arm hard snap once fully decelerated
-  if (scrolling && absV < 0.1) {
+  // Parallax — pass pre-built pos; direct style.transform (no gsap.set per image)
+  applyParallax(pos);
+
+  // Snap trigger
+  if (scrolling && absV < 0.3) {
     clearTimeout(snapTimer);
     snapTimer = setTimeout(snap, CFG.snapIdleMs);
   }
@@ -283,16 +453,25 @@ function initWheel() {
   window.addEventListener('wheel', e => {
     e.preventDefault();
     if (isSnapping) return;
-    scrolling = true;
+    scrolling = true;   // ← user is actively scrolling; re-arm snap timer
     clearTimeout(snapTimer);
 
     let delta = e.deltaY;
     if (e.deltaMode === 1) delta *= 28;
     if (e.deltaMode === 2) delta *= 500;
 
-    angVelocity += delta * CFG.wheelMult;
-    angVelocity  = Math.max(-CFG.maxAngVelocity, Math.min(CFG.maxAngVelocity, angVelocity));
+    velocity -= delta * CFG.wheelMult;
+    velocity  = Math.max(-CFG.maxVelocity, Math.min(CFG.maxVelocity, velocity));
   }, { passive: false });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   SIZE CLIPPER & CLIP PATH
+   ════════════════════════════════════════════════════════════════════ */
+function sizeClipper() {
+  // Width/height set in CSS (active-w + 2*barrel-max × 100vh)
+  // Just draw the resting clip-path
+  updateClipPath(0);
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -302,20 +481,30 @@ function init() {
   buildDOM();
 
   requestAnimationFrame(() => {
-    measureItemHeight();
-    computeRadius();
-    placeItems();
-    updateClipPath(0);
-    renderDrum();
-    refreshLists();
+    measure();
+    precomputeHeights();   // must run after measure() so SLIDE_H is ready for getTargetY
+    sizeClipper();
+
+    // Start centered on the first REAL item (DOM index = CLONE_COUNT)
+    trackY = getTargetY(realStart());
+    gsap.set(filmTrack, { y: trackY });
+
+    // Init list positions
+    refreshActiveClasses();
+
+    // Start loop + wheel
     tick();
     initWheel();
 
     window.addEventListener('resize', () => {
-      measureItemHeight();
-      computeRadius();
-      placeItems();
-      updateClipPath(0);
+      measure();
+      precomputeHeights();
+      sizeClipper();
+      trackY = getTargetY(
+        realStart() + activeReal   // re-center on current real item
+      );
+      velocity = 0;
+      gsap.set(filmTrack, { y: trackY });
     });
   });
 }
