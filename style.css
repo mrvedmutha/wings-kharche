@@ -4,17 +4,14 @@
 :root {
   --bg:          #F5F2EE;
   --fg:          #1a1a1a;
-  --muted:       0.22;           /* inactive list opacity */
+  --muted:       0.22;
   --font:        'IBM Plex Mono', monospace;
-  --gap:         20px;
 
-  /* Visual sizes of the images */
+  /* Active image dimensions */
   --active-w:    42vw;
-  --inactive-w:  calc(var(--active-w) * 0.70);
   --active-h:    calc(var(--active-w) * 9 / 16);
-  --inactive-h:  calc(var(--inactive-w) * 9 / 16);  /* all landscape */
 
-  /* Barrel max expansion (clipper is wider by this × 2) */
+  /* Barrel max bow (clipper is wider by this × 2) */
   --barrel-max:  130px;
 }
 
@@ -48,7 +45,7 @@ html, body {
   inset: 0;
   display: flex;
   flex-direction: row;
-  align-items: center;   /* vertically centers the flex children */
+  align-items: center;
 }
 
 /* ─── SIDE LISTS ────────────────────────────────────────────────── */
@@ -59,12 +56,11 @@ html, body {
   position: relative;
   overflow: hidden;
   display: flex;
-  /* DO NOT use align-items/justify-content here — GSAP handles track position */
-  z-index: 10;           /* sits on top of barrel overflow */
+  z-index: 10;
 }
 
 .list__track {
-  position: absolute;   /* GSAP moves it via translateY */
+  position: absolute;
   top: 0;
   display: flex;
   flex-direction: column;
@@ -72,7 +68,6 @@ html, body {
   will-change: transform;
 }
 
-/* Align text within each column */
 .list--left  .list__track { left:  20px; text-align: left; }
 .list--right .list__track { right: 20px; text-align: right; }
 
@@ -87,16 +82,15 @@ html, body {
 }
 .list__item.is-active { opacity: 1; }
 
-/* ─── FILMSTRIP ─────────────────────────────────────────────────── */
-.filmstrip {
-  flex: 1;               /* takes the remaining 70vw (100vw − 15vw − 15vw) */
+/* ─── DRUM SCENE ────────────────────────────────────────────────── */
+.drum-scene {
+  flex: 1;
   height: 100vh;
   position: relative;
-  overflow: visible;     /* ← allows barrel sides to spill out */
+  overflow: visible;
   z-index: 1;
 }
 
-/* Hidden SVG for clip-path definition */
 .clip-svg {
   position: absolute;
   width: 0; height: 0;
@@ -104,62 +98,46 @@ html, body {
   overflow: hidden;
 }
 
-/* ─── CLIPPER — wider than filmstrip for barrel expansion ───────── */
-.filmstrip__clipper {
+/* Wider than active-w by 2×barrel-max so barrel bow has room */
+.drum-clipper {
   position: absolute;
-  /* Wider than the active image by 2×barrel-max */
   width:  calc(var(--active-w) + var(--barrel-max) * 2);
   height: 100vh;
-  /* Always centered inside the filmstrip, regardless of filmstrip width */
   left:   calc(50% - var(--active-w) / 2 - var(--barrel-max));
   top: 0;
   clip-path: url(#filmClip);
   will-change: clip-path;
+  /* Perspective lives here so items recede naturally as they rotate away */
+  perspective: 900px;
+  perspective-origin: 50% 50%;
 }
 
-/* ─── TRACK ─────────────────────────────────────────────────────── */
-.filmstrip__track {
+/* Pivot point at center of clipper — JS drives rotateX */
+.drum {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--gap);
+  left: 50%;
+  top:  50%;
+  transform-style: preserve-3d;
   will-change: transform;
 }
 
-/* ─── SLIDES ─────────────────────────────────────────────────────── */
-.slide {
-  flex-shrink: 0;
-  overflow: hidden;
-  position: relative;
-  /* Height transitions smoothly — snap math uses precomputed SLIDE_H, never live DOM heights,
-     so CSS transitions here are safe and purely cosmetic. */
-  transition: height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-
-.slide--active {
-  /* Fill the full clipper width so barrel clipping is visible */
-  width:  calc(var(--active-w) + var(--barrel-max) * 2);
+/* Each image card, centered on the drum pivot */
+.drum__item {
+  position: absolute;
+  width:  var(--active-w);
   height: var(--active-h);
+  left:   calc(var(--active-w) / -2);
+  top:    calc(var(--active-h) / -2);
+  overflow: hidden;
+  will-change: transform, opacity;
 }
 
-.slide--inactive {
-  /* Same width as active — barrel clip-path bows ALL slides, not just active */
-  width:  calc(var(--active-w) + var(--barrel-max) * 2);
-  height: var(--inactive-h);
-}
-
-.slide__img {
+.drum__img {
   width: 100%;
-  height: 120%;               /* extra height room for parallax travel */
+  height: 120%;           /* extra height for subtle parallax headroom */
   object-fit: cover;
-  object-position: center center;
   display: block;
   pointer-events: none;
-  will-change: transform;
   transform: translateY(-10%);
 }
 
