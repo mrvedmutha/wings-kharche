@@ -36,6 +36,11 @@ const state = {
   introComplete: false,
 };
 
+// Prevent browser from overriding our manual scroll restoration
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
+let savedScroll = 0;
+
 /* ── DOM REFS ───────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
 const introEl     = $('intro');
@@ -219,26 +224,35 @@ function runIntro() {
     });
   }, stripDone + 250);
 
-  // Phase 7 — overlay fades, layout revealed
+  // Phase 7 — overlay fades, scroll position restored, layout revealed
   const cascadeDone = stripDone + 250 + 750 + (PROJECTS.length - 1) * 22;
 
   setTimeout(() => {
     introEl.style.transition = 'opacity 0.55s ease';
     introEl.style.opacity    = '0';
+
+    // Remove overflow: hidden so scroll restoration works,
+    // then jump while the overlay is still fading (fixed overlay hides the jump)
+    document.body.classList.remove('intro-running');
+    window.scrollTo({ top: savedScroll, behavior: 'instant' });
+
     topNav.classList.add('visible');
     leftCol.classList.add('visible');
     rightCol.classList.add('visible');
     pgToggle.classList.add('visible');
+
+    state.scrollEnabled = true;
+    state.activeIndex   = getActiveIndex();
+    updateLists();
+    updateParallax();
+    updateProgress();
+    updateBottomNav();
   }, cascadeDone + 100);
 
-  // Phase 8 — cleanup, enable scroll
+  // Phase 8 — remove overlay element
   setTimeout(() => {
     introEl.style.display = 'none';
-    document.body.classList.remove('intro-running');
-    window.scrollTo(0, 0);
-    state.scrollEnabled = true;
-    state.introComplete = true;
-    updateLists();
+    state.introComplete   = true;
   }, cascadeDone + 700);
 }
 
@@ -355,6 +369,9 @@ function onScroll() {
   requestAnimationFrame(() => {
     rafPending = false;
 
+    // Persist scroll so reload can restore position
+    sessionStorage.setItem('kh_scroll', String(window.scrollY));
+
     const idx = getActiveIndex();
     if (idx !== state.activeIndex) {
       state.activeIndex = idx;
@@ -408,6 +425,9 @@ zindexCb.addEventListener('change', () => {
 
 /* ── INIT ───────────────────────────────────────────────────── */
 function init() {
+  // Read scroll position saved before the last reload
+  savedScroll = parseInt(sessionStorage.getItem('kh_scroll') || '0', 10);
+
   buildLists();
   buildTrack();
 
