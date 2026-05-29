@@ -186,7 +186,60 @@ function runIntro() {
     });
   }, allDone + 380);
 
-  // Strip fully settled — ready for next phase (user-defined)
+  // When last strip tile finishes settling
+  const stripDone = allDone + 380 + 550 + (PROJECTS.length - 1) * 32;
+
+  // Phase 6 — strip slides down, each tile scales up to its actual track position
+  setTimeout(() => {
+    const wraps = [...imageTrack.querySelectorAll('.img-wrap')];
+    const tiles = [...introTiles.querySelectorAll('.intro-tile')];
+
+    // Batch-read all track positions before any writes
+    const targets = PROJECTS.map((p, i) => {
+      const w  = wraps[i];
+      const r  = w.getBoundingClientRect();
+      const tw = p.orient === 'landscape'
+        ? Math.round(THUMB_H * 16 / 9)
+        : Math.round(THUMB_H * 2  / 3);
+      return {
+        dx: (r.left + w.offsetWidth  / 2) - cx,
+        dy: (r.top  + w.offsetHeight / 2) - cy,
+        sx: w.offsetWidth  / tw,
+        sy: w.offsetHeight / THUMB_H,
+      };
+    });
+
+    // Write: translate to track centre + scale to full size
+    tiles.forEach((tile, i) => {
+      const t = targets[i];
+      if (!t) return;
+      const delay = i * 22;
+      tile.style.transition = `transform 0.75s cubic-bezier(0.4,0,0.2,1) ${delay}ms`;
+      tile.style.transform  = `translate(${t.dx}px, ${t.dy}px) scale(${t.sx}, ${t.sy})`;
+    });
+  }, stripDone + 250);
+
+  // Phase 7 — overlay fades, layout revealed
+  const cascadeDone = stripDone + 250 + 750 + (PROJECTS.length - 1) * 22;
+
+  setTimeout(() => {
+    introEl.style.transition = 'opacity 0.55s ease';
+    introEl.style.opacity    = '0';
+    topNav.classList.add('visible');
+    leftCol.classList.add('visible');
+    rightCol.classList.add('visible');
+    pgToggle.classList.add('visible');
+  }, cascadeDone + 100);
+
+  // Phase 8 — cleanup, enable scroll
+  setTimeout(() => {
+    introEl.style.display = 'none';
+    document.body.classList.remove('intro-running');
+    window.scrollTo(0, 0);
+    state.scrollEnabled = true;
+    state.introComplete = true;
+    updateLists();
+  }, cascadeDone + 700);
 }
 
 /* ── ACTIVE INDEX DETECTION ─────────────────────────────────── */
