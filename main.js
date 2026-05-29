@@ -151,86 +151,41 @@ function runIntro() {
   // All images settled
   const allDone = POP_START + PROJECTS.length * STAGGER + 400;
 
-  // Phase 4 — logo fades, line grows from centre of stack
-  let introLine;
+  // Phase 4 — logo fades
   setTimeout(() => {
     introIcon.style.transition = 'opacity 0.25s ease';
     introIcon.style.opacity    = '0';
-
-    introLine = document.createElement('div');
-    Object.assign(introLine.style, {
-      position:   'absolute',
-      left:       `${vw / 2}px`,
-      top:        `${vh / 2}px`,
-      width:      '0px',
-      height:     '1.5px',
-      background: '#111',
-      transform:  'translate(-50%, -50%)',
-      zIndex:     '200',
-      transition: 'width 0.5s cubic-bezier(0.4,0,0.2,1)',
-    });
-    introEl.appendChild(introLine);
-    // Force reflow so browser registers width:0 before we grow it
-    void introLine.offsetWidth;
-    introLine.style.width = `${TW}px`;
   }, allDone + 100);
 
-  // Phase 5 — cascade: each tile flies to its track image using transform only
-  //           Batch all reads first, then write — no layout thrashing
+  // Phase 5 — tiles arrange into a vertical strip (still thumbnail scale)
+  //           transform only — center-to-center, uniform scale so no layout cost
   setTimeout(() => {
-    if (introLine) {
-      introLine.style.transition = 'opacity 0.25s ease';
-      introLine.style.opacity    = '0';
-    }
-
-    const wraps = [...imageTrack.querySelectorAll('.img-wrap')];
     const tiles = [...introTiles.querySelectorAll('.intro-tile')];
+    const n     = tiles.length;
 
-    // READ all positions in one pass (avoids interleaved read/write reflows)
-    // Using center-to-center offsets because transform-origin is center
-    const tileCX = tx + TW / 2;
-    const tileCY = ty + TH / 2;
-    const targets = wraps.map(w => {
-      const r = w.getBoundingClientRect();
-      return {
-        dx: (r.left + w.offsetWidth  / 2) - tileCX,
-        dy: (r.top  + w.offsetHeight / 2) - tileCY,
-        sx: w.offsetWidth  / TW,
-        sy: w.offsetHeight / TH,
-      };
-    });
+    // Scale tiles down to fit all of them in the viewport height
+    const GAP     = 5;
+    const scale   = Math.min(0.38, (vh * 0.82 - (n - 1) * GAP) / (n * TH));
+    const scaledH = TH * scale;
+    const totalH  = n * scaledH + (n - 1) * GAP;
+    const stripTop = (vh - totalH) / 2;
 
-    // WRITE: animate with transform + opacity only (compositor-only, no layout)
+    // Tile centre in the stack (all at same position)
+    const stackCX = tx + TW / 2;
+    const stackCY = ty + TH / 2;
+
     tiles.forEach((tile, i) => {
-      const t = targets[i];
-      if (!t) return;
-      const delay = i * 28;
-      tile.style.transition = `transform 0.7s cubic-bezier(0.4,0,0.2,1) ${delay}ms,
-                               opacity  0.5s ease ${delay}ms`;
-      tile.style.transform  = `translate(${t.dx}px, ${t.dy}px) scale(${t.sx}, ${t.sy})`;
-      tile.style.opacity    = '1';
+      const centerY = stripTop + i * (scaledH + GAP) + scaledH / 2;
+      const dy      = centerY - stackCY;      // vertical offset from stack centre
+      // dx = 0 — all horizontally centred
+
+      const delay = i * 35;
+      tile.style.transition = `transform 0.55s cubic-bezier(0.25,0.46,0.45,0.94) ${delay}ms`;
+      tile.style.transform  = `translate(0px, ${dy}px) scale(${scale})`;
     });
-  }, allDone + 720);
+  }, allDone + 380);
 
-  // Phase 6 — overlay fades, layout revealed
-  setTimeout(() => {
-    introEl.style.transition = 'opacity 0.55s ease';
-    introEl.style.opacity    = '0';
-    topNav.classList.add('visible');
-    leftCol.classList.add('visible');
-    rightCol.classList.add('visible');
-    pgToggle.classList.add('visible');
-  }, allDone + 1080);
-
-  // Phase 7 — cleanup + enable scroll
-  setTimeout(() => {
-    introEl.style.display = 'none';
-    document.body.classList.remove('intro-running');
-    window.scrollTo(0, 0);
-    state.scrollEnabled = true;
-    state.introComplete = true;
-    updateLists();
-  }, allDone + 1700);
+  // Strip fully settled — ready for next phase (user-defined)
 }
 
 /* ── ACTIVE INDEX DETECTION ─────────────────────────────────── */
