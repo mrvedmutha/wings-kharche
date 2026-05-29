@@ -385,8 +385,8 @@ function positionListType1() {
     const totalDY  = targetY - naturalY;
 
     // progress: 0 = at bottom, 1 = fully parked at slot
-    // travels during the scroll span leading up to its image
-    const progress = Math.min(1, Math.max(0, fracIdx - i + 1));
+    // item i travels during fracIdx [i, i+1] — starts moving as image i centers
+    const progress = Math.min(1, Math.max(0, fracIdx - i));
 
     li.style.transition = 'none';
     li.style.transform  = `translateY(${totalDY * progress}px)`;
