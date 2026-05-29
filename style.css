@@ -69,7 +69,8 @@ body.intro-running { overflow: hidden; }
   position: absolute;
   overflow: hidden;
   border-radius: 3px;
-  /* start state set by JS */
+  transform-origin: top left;
+  will-change: transform, opacity;
 }
 
 .intro-tile img {

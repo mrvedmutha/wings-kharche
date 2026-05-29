@@ -151,8 +151,8 @@ function runIntro() {
   // All images settled
   const allDone = POP_START + PROJECTS.length * STAGGER + 400;
 
-  // Phase 4 — logo fades, thin line grows from centre of stack
-  let   introLine;
+  // Phase 4 — logo fades, line grows from centre of stack
+  let introLine;
   setTimeout(() => {
     introIcon.style.transition = 'opacity 0.25s ease';
     introIcon.style.opacity    = '0';
@@ -164,55 +164,49 @@ function runIntro() {
       top:        `${vh / 2}px`,
       width:      '0px',
       height:     '1.5px',
-      background: '#000',
+      background: '#111',
       transform:  'translate(-50%, -50%)',
       zIndex:     '200',
-      transition: 'width 0.45s cubic-bezier(0.4,0,0.2,1)',
+      transition: 'width 0.5s cubic-bezier(0.4,0,0.2,1)',
     });
     introEl.appendChild(introLine);
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => { introLine.style.width = `${TW}px`; });
-    });
+    // Force reflow so browser registers width:0 before we grow it
+    void introLine.offsetWidth;
+    introLine.style.width = `${TW}px`;
   }, allDone + 100);
 
-  // Phase 5 — images cascade DOWN + scale up, line fades
-  //           each tile animates to its actual track-image size & position
+  // Phase 5 — cascade: each tile flies to its track image using transform only
+  //           Batch all reads first, then write — no layout thrashing
   setTimeout(() => {
     if (introLine) {
-      introLine.style.transition = 'opacity 0.3s ease';
+      introLine.style.transition = 'opacity 0.25s ease';
       introLine.style.opacity    = '0';
     }
 
     const wraps = [...imageTrack.querySelectorAll('.img-wrap')];
     const tiles = [...introTiles.querySelectorAll('.intro-tile')];
 
+    // READ all positions in one pass (avoids interleaved read/write reflows)
+    const targets = wraps.map(w => ({
+      dx:    w.getBoundingClientRect().left - tx,
+      dy:    w.getBoundingClientRect().top  - ty,
+      sx:    w.offsetWidth  / TW,
+      sy:    w.offsetHeight / TH,
+    }));
+
+    // WRITE: animate with transform + opacity only (compositor-only, no layout)
     tiles.forEach((tile, i) => {
-      const wrap = wraps[i];
-      if (!wrap) return;
-
-      const fullW  = wrap.offsetWidth;
-      const fullH  = wrap.offsetHeight;
-      // getBoundingClientRect at scrollY=0 gives screen position
-      const wRect  = wrap.getBoundingClientRect();
-      const destX  = wRect.left;
-      const destY  = wRect.top;
-
-      const delay = i * 30;
-      tile.style.transition = `left 0.65s cubic-bezier(0.4,0,0.2,1) ${delay}ms,
-                               top  0.65s cubic-bezier(0.4,0,0.2,1) ${delay}ms,
-                               width  0.65s ease ${delay}ms,
-                               height 0.65s ease ${delay}ms,
-                               opacity 0.4s ease ${delay}ms`;
-      tile.style.left    = `${destX}px`;
-      tile.style.top     = `${destY}px`;
-      tile.style.width   = `${fullW}px`;
-      tile.style.height  = `${fullH}px`;
-      tile.style.opacity = '1';
+      const t = targets[i];
+      if (!t) return;
+      const delay = i * 28;
+      tile.style.transition = `transform 0.7s cubic-bezier(0.4,0,0.2,1) ${delay}ms,
+                               opacity  0.5s ease ${delay}ms`;
+      tile.style.transform  = `translate(${t.dx}px, ${t.dy}px) scale(${t.sx}, ${t.sy})`;
+      tile.style.opacity    = '1';
     });
-  }, allDone + 580);
+  }, allDone + 720);
 
-  // Phase 6 — overlay fades, layout revealed (while tiles are still animating)
+  // Phase 6 — overlay fades, layout revealed
   setTimeout(() => {
     introEl.style.transition = 'opacity 0.55s ease';
     introEl.style.opacity    = '0';
@@ -220,7 +214,7 @@ function runIntro() {
     leftCol.classList.add('visible');
     rightCol.classList.add('visible');
     pgToggle.classList.add('visible');
-  }, allDone + 900);
+  }, allDone + 1080);
 
   // Phase 7 — cleanup + enable scroll
   setTimeout(() => {
@@ -230,7 +224,7 @@ function runIntro() {
     state.scrollEnabled = true;
     state.introComplete = true;
     updateLists();
-  }, allDone + 1500);
+  }, allDone + 1700);
 }
 
 /* ── ACTIVE INDEX DETECTION ─────────────────────────────────── */
