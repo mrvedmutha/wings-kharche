@@ -346,22 +346,10 @@ function updateLists() {
   if (state.animType === 1) {
     positionListType1();
   } else {
-    positionListType2(state.activeIndex);
+    positionListType2();
   }
 }
 
-/* ── LIST POSITIONING HELPERS ───────────────────────────────── */
-function listTargetY(list, wrap, activeIdx) {
-  const items  = [...list.querySelectorAll('li')];
-  if (!items.length) return 0;
-  // Measure real item height once (all items are identical style)
-  const itemH  = items[0].getBoundingClientRect().height;
-  const center = window.innerHeight / 2;
-  const top    = wrap.getBoundingClientRect().top;
-  return center - top - activeIdx * itemH - itemH / 2;
-}
-
-const LIST_EASE = 'transform 0.5s cubic-bezier(0.25,0.46,0.45,0.94)';
 
 /* TYPE 1 — each item travels individually from bottom to its slot ─ */
 function positionListType1() {
@@ -398,10 +386,34 @@ function positionListType1() {
   }
 }
 
-/* TYPE 2 — both lists slide; right list: color only, no movement */
-function positionListType2(idx) {
-  leftList.style.transition = LIST_EASE;
-  leftList.style.transform  = `translateY(${listTargetY(leftList, leftWrap, idx)}px)`;
+/* TYPE 2 — infinite wrap, active item always at viewport center ── */
+function positionListType2() {
+  if (!leftItemNaturalYs.length) return;
+
+  const n       = PROJECTS.length;
+  const fracIdx = getScrollFracIdx();
+  const itemH   = leftItemNaturalYs.length > 1
+    ? leftItemNaturalYs[1] - leftItemNaturalYs[0]
+    : 22;
+  const centerY = window.innerHeight / 2;
+
+  leftList.querySelectorAll('li').forEach((li, i) => {
+    let diff = i - fracIdx;
+    // Wrap to shortest path: normalise to (-n/2, n/2]
+    diff -= Math.round(diff / n) * n;
+
+    const targetY  = centerY + diff * itemH;
+    const naturalY = leftItemNaturalYs[i];
+    li.style.transition = 'none';
+    li.style.transform  = `translateY(${targetY - naturalY}px)`;
+  });
+
+  // Active = item closest to center (round fracIdx, keep in bounds)
+  const activeIdx = ((Math.round(fracIdx) % n) + n) % n;
+  if (activeIdx !== state.activeIndex) {
+    state.activeIndex = activeIdx;
+    updateActiveCls(activeIdx);
+  }
 }
 
 /* ── PROGRESS INDICATOR ─────────────────────────────────────── */
@@ -433,18 +445,11 @@ function onScroll() {
 
     sessionStorage.setItem('kh_scroll', String(window.scrollY));
 
+    // Both types run every frame — continuous scroll-linked movement
     if (state.animType === 1) {
-      // Type 1: runs every frame; active class managed inside positionListType1
       positionListType1();
     } else {
-      // Type 2: only reposition when active image changes
-      const idx     = getActiveIndex();
-      const changed = idx !== state.activeIndex;
-      if (changed) {
-        state.activeIndex = idx;
-        updateActiveCls(idx);
-        positionListType2(idx);
-      }
+      positionListType2();
     }
 
     updateParallax();
