@@ -336,26 +336,16 @@ function listTargetY(list, wrap, activeIdx) {
 
 const LIST_EASE = 'transform 0.5s cubic-bezier(0.25,0.46,0.45,0.94)';
 
-/* TYPE 1 — left list rises bottom→top, right list centers on active cat */
+/* TYPE 1 — left list rises bottom→top; right list: color only, no movement */
 function positionListType1(idx) {
-  leftList.style.transition  = LIST_EASE;
-  leftList.style.transform   = `translateY(${listTargetY(leftList, leftWrap, idx)}px)`;
-
-  const rItems = [...rightList.querySelectorAll('li')];
-  const rIdx   = rItems.findIndex(li => li.classList.contains('is-active'));
-  rightList.style.transition = LIST_EASE;
-  rightList.style.transform  = `translateY(${listTargetY(rightList, rightWrap, rIdx)}px)`;
+  leftList.style.transition = LIST_EASE;
+  leftList.style.transform  = `translateY(${listTargetY(leftList, leftWrap, idx)}px)`;
 }
 
-/* TYPE 2 — both lists: active item stays at viewport center */
+/* TYPE 2 — both lists slide; right list: color only, no movement */
 function positionListType2(idx) {
-  leftList.style.transition  = LIST_EASE;
-  leftList.style.transform   = `translateY(${listTargetY(leftList, leftWrap, idx)}px)`;
-
-  const rItems = [...rightList.querySelectorAll('li')];
-  const rIdx   = rItems.findIndex(li => li.classList.contains('is-active'));
-  rightList.style.transition = LIST_EASE;
-  rightList.style.transform  = `translateY(${listTargetY(rightList, rightWrap, rIdx)}px)`;
+  leftList.style.transition = LIST_EASE;
+  leftList.style.transform  = `translateY(${listTargetY(leftList, leftWrap, idx)}px)`;
 }
 
 /* ── PROGRESS INDICATOR ─────────────────────────────────────── */
@@ -468,9 +458,8 @@ function init() {
   // Apply initial body class for z-index
   document.body.classList.add('zindex-on');
 
-  // Initial list positions (off-screen below center — they reveal after intro)
-  leftList.style.transform  = `translateY(${window.innerHeight}px)`;
-  rightList.style.transform = `translateY(${window.innerHeight}px)`;
+  // Left list starts off-screen below, slides up after intro
+  leftList.style.transform = `translateY(${window.innerHeight}px)`;
 
   window.addEventListener('scroll', onScroll, { passive: true });
 

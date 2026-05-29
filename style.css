@@ -253,18 +253,17 @@ body.intro-running { overflow: hidden; }
   height: 100vh;
   width: 100%;
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-end;
 }
 
 #right-list {
-  position: absolute;
-  right: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 0;
   text-align: right;
-  will-change: transform;
 }
 
 #right-list li {
