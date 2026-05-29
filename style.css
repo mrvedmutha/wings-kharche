@@ -1,167 +1,631 @@
-/* ─── RESET ─────────────────────────────────────────────────────── */
+/* ── RESET ──────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:          #F5F2EE;
-  --fg:          #1a1a1a;
-  --muted:       0.22;           /* inactive list opacity */
-  --font:        'IBM Plex Mono', monospace;
-  --gap:         20px;
-
-  /* Visual sizes of the images */
-  --active-w:    42vw;
-  --inactive-w:  calc(var(--active-w) * 0.70);
-  --active-h:    calc(var(--active-w) * 9 / 16);
-  --inactive-h:  calc(var(--inactive-w) * 9 / 16);  /* all landscape */
-
-  /* Barrel max expansion (clipper is wider by this × 2) */
-  --barrel-max:  130px;
+  --col-w:      170px;
+  --col-pad:    20px;
+  --nav-h:      52px;
+  --img-gap:    24px;
+  --ls-w:       940px;
+  --ls-h:       530px;
+  --pt-w:       640px;
+  --pt-h:       860px;
+  --parallax:   100px;
+  --c-active:   #000000;
+  --c-muted:    #b6b6b6;
+  --c-featured: #f8c8c7;
+  --font-list:  'DM Sans', sans-serif;
+  --font-ui:    'Inter', sans-serif;
 }
 
-html, body {
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--font);
-  font-size: 11px;
-  letter-spacing: 0.06em;
+html { scroll-behavior: auto; }
+
+body {
+  background: #fff;
+  color: #000;
+  font-family: var(--font-list);
+  overflow-x: hidden;
 }
 
-/* ─── NAV ───────────────────────────────────────────────────────── */
-.nav {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  z-index: 100;
-  display: flex;
-  justify-content: space-between;
-  padding: 24px 40px;
-  pointer-events: none;
-}
-.nav__brand { font-weight: 400; text-transform: uppercase; }
-.nav__sub   { opacity: 0.35; font-weight: 300; text-transform: uppercase; }
+body.intro-running { overflow: hidden; }
 
-/* ─── GALLERY WRAPPER ───────────────────────────────────────────── */
-.gallery {
+/* ── INTRO OVERLAY ──────────────────────────────────────────── */
+#intro {
   position: fixed;
   inset: 0;
+  background: #000;
+  z-index: 9000;
   display: flex;
-  flex-direction: row;
-  align-items: center;   /* vertically centers the flex children */
-}
-
-/* ─── SIDE LISTS ────────────────────────────────────────────────── */
-.list {
-  width: 15vw;
-  flex-shrink: 0;
-  height: 100vh;
-  position: relative;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
-  display: flex;
-  /* DO NOT use align-items/justify-content here — GSAP handles track position */
-  z-index: 10;           /* sits on top of barrel overflow */
+  pointer-events: none;
 }
 
-.list__track {
-  position: absolute;   /* GSAP moves it via translateY */
+#intro-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 0;
+  z-index: 2;
+  width: 48px;
+  height: 48px;
+  transition: none;
+}
+
+#intro-icon img {
+  width: 100%;
+  height: 100%;
+  filter: invert(1);
+}
+
+#intro-tiles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.intro-tile {
+  position: absolute;
+  overflow: hidden;
+  transform: scale(0);
+  opacity: 0;
+  border-radius: 4px;
+}
+
+.intro-tile img {
+  width: 100%;
+  height: 130%;
+  object-fit: cover;
+  top: -15%;
+  position: absolute;
+}
+
+/* ── TOP NAV ────────────────────────────────────────────────── */
+#top-nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--nav-h);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--col-pad);
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+#top-nav.visible { opacity: 1; }
+
+.nav-logo {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.nav-logo img {
+  height: 26px;
+  width: auto;
+  display: block;
+}
+
+.nav-tagline {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  color: #000;
+  margin-left: 32px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.nav-center {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  color: #000;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.nav-slide { color: #000; }
+.nav-sep   { color: var(--c-muted); }
+.nav-grid  { color: var(--c-muted); }
+
+.nav-contact {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  color: #000;
+  text-transform: capitalize;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ── SHELL ──────────────────────────────────────────────────── */
+#shell {
+  display: flex;
+  position: relative;
+  min-height: 100vh;
+}
+
+/* ── LEFT COLUMN ────────────────────────────────────────────── */
+#left-col {
+  position: fixed;
+  left: var(--col-pad);
   top: 0;
+  bottom: 0;
+  width: var(--col-w);
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  justify-content: center;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+#left-col.visible { opacity: 1; }
+
+#left-list-wrap {
+  position: relative;
+  overflow: hidden;
+  height: 100vh;
+  width: 100%;
+}
+
+#left-list {
+  position: absolute;
+  left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
   will-change: transform;
 }
 
-/* Align text within each column */
-.list--left  .list__track { left:  20px; text-align: left; }
-.list--right .list__track { right: 20px; text-align: right; }
-
-.list__item {
-  opacity: var(--muted);
-  transition: opacity 0.5s ease;
-  text-transform: uppercase;
-  line-height: 1.2;
+#left-list li {
+  font-family: var(--font-list);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--c-muted);
+  line-height: 1.9;
   white-space: nowrap;
-  user-select: none;
   cursor: default;
-}
-.list__item.is-active { opacity: 1; }
-
-/* ─── FILMSTRIP ─────────────────────────────────────────────────── */
-.filmstrip {
-  flex: 1;               /* takes the remaining 70vw (100vw − 15vw − 15vw) */
-  height: 100vh;
-  position: relative;
-  overflow: visible;     /* ← allows barrel sides to spill out */
-  z-index: 1;
+  transition: color 0.35s ease, font-weight 0.35s ease;
 }
 
-/* Hidden SVG for clip-path definition */
-.clip-svg {
+#left-list li.is-active {
+  color: var(--c-active);
+  font-weight: 500;
+}
+
+#featured-label {
   position: absolute;
-  width: 0; height: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-/* ─── CLIPPER — wider than filmstrip for barrel expansion ───────── */
-.filmstrip__clipper {
-  position: absolute;
-  /* Wider than the active image by 2×barrel-max */
-  width:  calc(var(--active-w) + var(--barrel-max) * 2);
-  height: 100vh;
-  /* Always centered inside the filmstrip, regardless of filmstrip width */
-  left:   calc(50% - var(--active-w) / 2 - var(--barrel-max));
-  top: 0;
-  clip-path: url(#filmClip);
-  will-change: clip-path;
-}
-
-/* ─── TRACK ─────────────────────────────────────────────────────── */
-.filmstrip__track {
-  position: absolute;
-  top: 0;
   left: 0;
+  bottom: calc(50% - 180px);
+  font-family: var(--font-list);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--c-featured);
+}
+
+#progress-pct {
+  position: absolute;
+  left: 0;
+  font-family: var(--font-list);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--c-muted);
+  bottom: calc(50% - 220px);
+  transition: transform 0.4s ease;
+}
+
+/* ── RIGHT COLUMN ───────────────────────────────────────────── */
+#right-col {
+  position: fixed;
+  right: var(--col-pad);
+  top: 0;
+  bottom: 0;
+  width: var(--col-w);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-end;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+#right-col.visible { opacity: 1; }
+
+#right-list-wrap {
+  position: relative;
+  overflow: hidden;
+  height: 100vh;
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+}
+
+#right-list {
+  position: absolute;
   right: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  text-align: right;
+  will-change: transform;
+}
+
+#right-list li {
+  font-family: var(--font-list);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--c-muted);
+  line-height: 1.9;
+  white-space: nowrap;
+  cursor: default;
+  transition: color 0.35s ease, font-weight 0.35s ease;
+}
+
+#right-list li.is-active {
+  color: var(--c-active);
+  font-weight: 500;
+}
+
+/* ── CENTER STRIP ───────────────────────────────────────────── */
+#center-strip {
+  flex: 1;
+  margin-left: calc(var(--col-w) + var(--col-pad) + 20px);
+  margin-right: calc(var(--col-w) + var(--col-pad) + 20px);
+  display: flex;
+  justify-content: center;
+}
+
+#image-track {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--gap);
-  will-change: transform;
-}
-
-/* ─── SLIDES ─────────────────────────────────────────────────────── */
-.slide {
-  flex-shrink: 0;
-  overflow: hidden;
-  position: relative;
-  /* No CSS height transition — height is driven entirely by JS (visualH lerp in tick)
-     so position math and visual are always identical. CSS transition caused a 500ms
-     mismatch between buildPositions() and the actual rendered height. */
-}
-
-.slide--active {
-  /* Fill the full clipper width so barrel clipping is visible */
-  width:  calc(var(--active-w) + var(--barrel-max) * 2);
-  height: var(--active-h);
-}
-
-.slide--inactive {
-  /* Same width as active — barrel clip-path bows ALL slides, not just active */
-  width:  calc(var(--active-w) + var(--barrel-max) * 2);
-  height: var(--inactive-h);
-}
-
-.slide__img {
+  gap: var(--img-gap);
+  padding: 50vh 0;
   width: 100%;
-  height: 120%;               /* extra height room for parallax travel */
-  object-fit: cover;
-  object-position: center center;
-  display: block;
-  pointer-events: none;
-  will-change: transform;
-  transform: translateY(-10%);
+  max-width: var(--ls-w);
 }
 
-/* ─── HIDE SCROLLBAR ────────────────────────────────────────────── */
+/* ── IMAGE WRAPPERS ─────────────────────────────────────────── */
+.img-wrap {
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+  will-change: transform;
+}
+
+.img-wrap.landscape {
+  width: var(--ls-w);
+  height: var(--ls-h);
+}
+
+.img-wrap.portrait {
+  width: var(--pt-w);
+  height: var(--pt-h);
+  align-self: center;
+}
+
+.img-wrap img {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: calc(100% + var(--parallax));
+  top: calc(var(--parallax) / -2);
+  object-fit: cover;
+  display: block;
+  will-change: transform;
+  pointer-events: none;
+}
+
+/* Z-index layering — landscape in front */
+body.zindex-on .img-wrap.landscape { z-index: 2; }
+body.zindex-on .img-wrap.portrait  { z-index: 1; }
+
+/* ── FOOTER ─────────────────────────────────────────────────── */
+#site-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px var(--col-pad);
+  font-family: var(--font-list);
+  font-size: 12px;
+  font-weight: 400;
+  color: #000;
+  margin-top: 0;
+}
+
+.footer-l {
+  display: flex;
+  gap: 20px;
+}
+
+.footer-r {
+  color: var(--c-muted);
+}
+
+/* ── BOTTOM NAV ─────────────────────────────────────────────── */
+#bottom-nav {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  opacity: 0;
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 479px;
+  padding: 6px 16px;
+  background: rgba(0,0,0,0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 8px;
+  transition: transform 0.45s cubic-bezier(0.34,1.56,0.64,1), opacity 0.45s ease;
+  pointer-events: none;
+}
+
+#bottom-nav.visible {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  pointer-events: all;
+}
+
+.bnav-l {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bnav-icon {
+  width: 18px;
+  height: 18px;
+  filter: invert(1);
+  flex-shrink: 0;
+}
+
+.bnav-l span {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 400;
+  color: #fff;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.bnav-r {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.bnav-btn {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 400;
+  color: #fff;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-transform: capitalize;
+  padding: 6px 0;
+  white-space: nowrap;
+  transition: opacity 0.2s;
+}
+
+.bnav-btn:hover { opacity: 0.7; }
+
+.bnav-btn.is-active {
+  background: #fff;
+  color: #000;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-weight: 400;
+}
+
+/* ── PLAYGROUND TOGGLE ──────────────────────────────────────── */
+#pg-toggle {
+  position: fixed;
+  top: 14px;
+  right: var(--col-pad);
+  z-index: 700;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: #000;
+  background: none;
+  border: 1px solid rgba(0,0,0,0.18);
+  border-radius: 4px;
+  padding: 5px 10px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.6s ease, background 0.2s;
+}
+
+#pg-toggle.visible { opacity: 1; }
+#pg-toggle:hover { background: rgba(0,0,0,0.05); }
+
+/* ── PLAYGROUND PANEL ───────────────────────────────────────── */
+#pg-panel {
+  position: fixed;
+  top: 52px;
+  right: var(--col-pad);
+  z-index: 690;
+  width: 260px;
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transform: translateY(-8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+#pg-panel.open {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: all;
+}
+
+.pg-head {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(0,0,0,0.4);
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+}
+
+.pg-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pg-label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#gap-val {
+  color: #000;
+  font-weight: 500;
+}
+
+.pg-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.pg-btn {
+  flex: 1;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(0,0,0,0.5);
+  background: rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 4px;
+  padding: 6px 0;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.pg-btn.is-active {
+  background: #000;
+  color: #fff;
+  border-color: #000;
+}
+
+.pg-btn:not(.is-active):hover {
+  background: rgba(0,0,0,0.08);
+}
+
+#gap-slider {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 2px;
+  background: rgba(0,0,0,0.15);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+#gap-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #000;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+#gap-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: #000;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+/* Toggle switch */
+.pg-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.pg-switch input { display: none; }
+
+.pg-track {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  background: rgba(0,0,0,0.15);
+  border-radius: 9px;
+  flex-shrink: 0;
+  transition: background 0.25s;
+}
+
+.pg-switch input:checked ~ .pg-track { background: #000; }
+
+.pg-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.25s ease;
+}
+
+.pg-switch input:checked ~ .pg-track .pg-thumb {
+  transform: translateX(14px);
+}
+
+.pg-switch-lbl {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(0,0,0,0.6);
+}
+
+/* ── SCROLLBAR HIDE ─────────────────────────────────────────── */
 ::-webkit-scrollbar { display: none; }
+html { scrollbar-width: none; }

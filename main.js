@@ -1,542 +1,366 @@
-/* ═══════════════════════════════════════════════════════════════════
-   KHARCHE — Scroll Gallery  v2
-   - Wheel → velocity → RAF momentum
-   - SVG clip-path: barrel (forward) / pincushion (backward)
-   - Infinite loop via clones
-   - Parallax (subtle)
-   - List auto-centering via GSAP
-   ═══════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   KHARCHE — Homepage Animation  v3
+   Clean build — no GSAP, no clones, no distortion effects
+   ═══════════════════════════════════════════════════════════════ */
 
-/* ─── DATA ──────────────────────────────────────────────────────── */
+/* ── DATA ──────────────────────────────────────────────────── */
 const PROJECTS = [
-  { category: 'Home',      name: 'Home',        img: 'assets/pexels-shox-37520403.jpg' },
-  { category: 'Editorial', name: 'Still Life',  img: 'assets/pexels-benni-fish-40038242-36756262.jpg' },
-  { category: 'Editorial', name: 'Portraits',   img: 'assets/pexels-zulfugarkarimov-33719772.jpg' },
-  { category: 'Editorial', name: 'Fashion',     img: 'assets/pexels-reneterp-14318813.jpg' },
-  { category: 'Motion',    name: 'Urban Drift', img: 'assets/pexels-peter-dyllong-2158803154-36780320.jpg' },
-  { category: 'Motion',    name: 'Landscapes',  img: 'assets/pexels-navlakha-33803745.jpg' },
-  { category: 'Landscape', name: 'Mountains',   img: 'assets/pexels-wolfgang-weiser-467045605-27277417.jpg' },
-  { category: 'Landscape', name: 'Coastline',   img: 'assets/pexels-who0ne-36197805.jpg' },
-  { category: 'Portrait',  name: 'Closeup',     img: 'assets/pexels-robert-sliwinski-2155126657-37011539.jpg' },
+  { name: 'Notting Hill',              category: 'Homes',                      img: 'pexels-shox-37520403.jpg',                              orient: 'landscape' },
+  { name: 'Ascot',                     category: 'Residentials',               img: 'pexels-airamdphoto-27675599.jpg',                       orient: 'portrait'  },
+  { name: 'Tuxeda',                    category: 'Interiors',                  img: 'pexels-benni-fish-40038242-36756262.jpg',               orient: 'landscape' },
+  { name: 'Richmond',                  category: 'Homes',                      img: 'pexels-raoul-turmond-1765272532-33811740.jpg',          orient: 'portrait'  },
+  { name: 'IHeart',                    category: 'Retail & Hospitality',       img: 'pexels-navlakha-33803745.jpg',                          orient: 'landscape' },
+  { name: 'Pristine Pavilion',         category: 'Residentials',               img: 'pexels-paco-esqueda-787628224-34065622.jpg',            orient: 'portrait'  },
+  { name: 'Palm Grove',                category: 'Homes',                      img: 'pexels-peter-dyllong-2158803154-36780320.jpg',          orient: 'landscape' },
+  { name: 'Nilaaa',                    category: 'Interiors',                  img: 'pexels-axp-photography-500641970-30683411.jpg',         orient: 'portrait'  },
+  { name: 'Solomon Francis Residence', category: 'Homes',                      img: 'pexels-reneterp-14318813.jpg',                          orient: 'landscape' },
+  { name: 'Shree Lynwood House',       category: 'Residentials',               img: 'pexels-tommaso-37555693.jpg',                           orient: 'portrait'  },
+  { name: 'House Of Champions',        category: 'IT Parks & Offices',         img: 'pexels-robert-sliwinski-2155126657-37011539.jpg',       orient: 'landscape' },
+  { name: 'Rathod Residence',          category: 'Homes',                      img: 'pexels-lucky-the-chocolate-boss-222331365-17064380.jpg',orient: 'portrait'  },
+  { name: 'Sivaam',                    category: 'Institutional & Industrial', img: 'pexels-who0ne-36197805.jpg',                            orient: 'landscape' },
+  { name: 'Serene Springs',            category: 'Residentials',               img: 'pexels-zulfugarkarimov-33719772.jpg',                   orient: 'portrait'  },
+  { name: 'Elements',                  category: 'Interiors',                  img: 'pexels-wolfgang-weiser-467045605-27277417.jpg',         orient: 'landscape' },
+  { name: 'Ajay Residence',            category: 'Homes',                      img: 'pexels-robert-sliwinski-2155126657-37011539.jpg',       orient: 'landscape' },
+  { name: 'AMM School',                category: 'Institutional & Industrial', img: 'pexels-navlakha-33803745.jpg',                          orient: 'landscape' },
 ];
-const N         = PROJECTS.length;
+
 const CATEGORIES = [...new Set(PROJECTS.map(p => p.category))];
 
-/* ─── CLONE CONFIG ──────────────────────────────────────────────── */
-// We prepend CLONE_COUNT clones from the END, and append CLONE_COUNT from the START
-// So: [last CLONE_COUNT items] [all real items] [first CLONE_COUNT items]
-const CLONE_COUNT = 3;
-
-/* ─── CONFIG ────────────────────────────────────────────────────── */
-const CFG = {
-  friction:         0.86,   // per-frame velocity decay
-  wheelMult:        0.55,   // wheel delta → velocity multiplier
-  maxVelocity:      45,     // cap px/frame
-  snapDuration:     1.0,
-  snapEase:         'power2.inOut',
-  barrelMax:        130,    // max bow in px (matches CSS --barrel-max)
-  barrelCurve:      1.8,    // power exponent: >1 = slow scroll barely distorts, fast scroll hits max hard
-  barrelLerp:       0.14,   // smoothing toward target distortion
-  barrelRelaxDur:   0.7,    // ease back to 0 on snap
-  magnetThreshold:  12,     // velocity (px/frame) below which slot-machine mode activates
-  magnetStrength:   0.10,   // attraction pull per frame toward nearest center
-  listEaseDur:      0.8,
-  listEase:         'power2.inOut',
-  parallaxStr:      0.025,  // raw pixel-distance multiplier — keep tiny
-  parallaxLerp:     0.05,   // per-frame smoothing toward target (lower = more lag = silkier)
-  imageGap:         20,     // px — matches CSS --gap
-  snapIdleMs:       150,    // ms of near-zero velocity before snap fires
+/* ── STATE ─────────────────────────────────────────────────── */
+const state = {
+  activeIndex:   0,
+  animType:      1,       // 1 or 2
+  gap:           24,
+  zindex:        true,
+  scrollEnabled: false,
+  introComplete: false,
 };
 
-/* ─── STATE ─────────────────────────────────────────────────────── */
-let velocity    = 0;
-let trackY      = 0;
-let currentD    = 0;     // current barrel/pincushion offset
-let activeReal  = 0;     // real project index (0–N-1)
-let isSnapping  = false;
-let scrolling   = false; // true only after wheel input; cleared after snap completes
-let snapTimer   = null;
-let metrics     = [];    // per-slide {el, imgEl, realIndex or null for clone}
-let SLIDE_H     = { active: 0, inactive: 0 }; // final heights from CSS (never read mid-transition)
-let parallaxY   = [];    // per-slide smoothed parallax offset (%), lerped each frame
-let visualH     = [];    // per real-project index: current lerped height driving DOM + buildPositions
+/* ── DOM REFS ───────────────────────────────────────────────── */
+const $ = id => document.getElementById(id);
+const introEl     = $('intro');
+const introIcon   = $('intro-icon');
+const introTiles  = $('intro-tiles');
+const topNav      = $('top-nav');
+const leftCol     = $('left-col');
+const rightCol    = $('right-col');
+const leftList    = $('left-list');
+const rightList   = $('right-list');
+const leftWrap    = $('left-list-wrap');
+const rightWrap   = $('right-list-wrap');
+const imageTrack  = $('image-track');
+const progressEl  = $('progress-pct');
+const bottomNav   = $('bottom-nav');
+const pgToggle    = $('pg-toggle');
+const pgPanel     = $('pg-panel');
+const gapSlider   = $('gap-slider');
+const gapVal      = $('gap-val');
+const zindexCb    = $('zindex-cb');
+const zindexLbl   = $('zindex-lbl');
 
-/* ─── DOM REFS ──────────────────────────────────────────────────── */
-const filmTrack   = document.getElementById('filmTrack');
-const filmClipper = document.getElementById('filmClipper');
-const leftTrack   = document.getElementById('leftTrack');
-const rightTrack  = document.getElementById('rightTrack');
-const clipEl      = document.getElementById('filmClipPath');
-
-/* ════════════════════════════════════════════════════════════════════
-   BUILD DOM
-   ════════════════════════════════════════════════════════════════════ */
-function buildDOM() {
-  // ── Build left list (sub-project names)
+/* ── BUILD SIDE LISTS ───────────────────────────────────────── */
+function buildLists() {
   PROJECTS.forEach((p, i) => {
-    const item = document.createElement('div');
-    item.className = `list__item${i === 0 ? ' is-active' : ''}`;
-    item.dataset.realIndex = i;
-    item.textContent = p.name;
-    leftTrack.appendChild(item);
+    const li = document.createElement('li');
+    li.textContent = p.name;
+    li.dataset.idx = i;
+    if (i === 0) li.classList.add('is-active');
+    leftList.appendChild(li);
   });
 
-  // ── Build right list (category names)
   CATEGORIES.forEach(cat => {
-    const item = document.createElement('div');
-    item.className = `list__item${cat === PROJECTS[0].category ? ' is-active' : ''}`;
-    item.dataset.category = cat;
-    item.textContent = cat;
-    rightTrack.appendChild(item);
+    const li = document.createElement('li');
+    li.textContent = cat;
+    li.dataset.cat = cat;
+    if (cat === PROJECTS[0].category) li.classList.add('is-active');
+    rightList.appendChild(li);
   });
+}
 
-  // ── Build slides: [clones-top] [real items] [clones-bottom]
-  const allItems = [];
-
-  // Prepend: last CLONE_COUNT real items (as clones)
-  for (let c = CLONE_COUNT; c >= 1; c--) {
-    const realIdx = (N - c + N) % N;
-    allItems.push({ realIndex: realIdx, isClone: true });
-  }
-  // Real items
-  for (let i = 0; i < N; i++) {
-    allItems.push({ realIndex: i, isClone: false });
-  }
-  // Append: first CLONE_COUNT real items (as clones)
-  for (let c = 0; c < CLONE_COUNT; c++) {
-    allItems.push({ realIndex: c % N, isClone: true });
-  }
-
-  allItems.forEach((item, domIdx) => {
-    const p     = PROJECTS[item.realIndex];
-    const isAct = !item.isClone && item.realIndex === 0;
-
-    const slide = document.createElement('div');
-    slide.className = `slide ${isAct ? 'slide--active' : 'slide--inactive'}`;
-    slide.dataset.domIndex  = domIdx;
-    slide.dataset.realIndex = item.realIndex;
+/* ── BUILD IMAGE TRACK ──────────────────────────────────────── */
+function buildTrack() {
+  PROJECTS.forEach((p, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = `img-wrap ${p.orient}`;
+    wrap.dataset.idx = i;
 
     const img = document.createElement('img');
-    img.className = 'slide__img';
-    img.src = p.img;
+    img.src = `assets/${p.img}`;
     img.alt = p.name;
-    img.loading = domIdx <= CLONE_COUNT + 1 ? 'eager' : 'lazy';
+    img.loading = i < 3 ? 'eager' : 'lazy';
 
-    slide.appendChild(img);
-    filmTrack.appendChild(slide);
+    wrap.appendChild(img);
+    imageTrack.appendChild(wrap);
   });
 }
 
-/* ════════════════════════════════════════════════════════════════════
-   MEASURE
-   ════════════════════════════════════════════════════════════════════ */
-function measure() {
-  metrics = [];
-  filmTrack.querySelectorAll('.slide').forEach((el) => {
-    metrics.push({
-      el,
-      imgEl:     el.querySelector('.slide__img'),
-      realIndex: parseInt(el.dataset.realIndex),
+/* ── INTRO ANIMATION ────────────────────────────────────────── */
+function runIntro() {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // Phase 1: icon fades in
+  setTimeout(() => {
+    introIcon.style.transition = 'transform 0.5s cubic-bezier(0.34,1.56,0.64,1), opacity 0.4s ease';
+    introIcon.style.opacity = '1';
+    introIcon.style.transform = 'translate(-50%, -50%) scale(1)';
+  }, 200);
+
+  // Phase 2: image tiles pop in one by one
+  const tileW = 180;
+  const tileH = 130;
+  const cols  = 4;
+  const startX = vw / 2 - (cols * tileW) / 2;
+
+  PROJECTS.slice(0, 12).forEach((p, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const tx  = startX + col * (tileW + 10);
+    const ty  = vh / 2 - 200 + row * (tileH + 10);
+
+    const tile = document.createElement('div');
+    tile.className = 'intro-tile';
+    tile.style.cssText = `
+      left: ${tx}px;
+      top:  ${ty}px;
+      width:  ${tileW}px;
+      height: ${tileH}px;
+    `;
+
+    const img = document.createElement('img');
+    img.src = `assets/${p.img}`;
+    img.alt = '';
+    tile.appendChild(img);
+    introTiles.appendChild(tile);
+
+    const delay = 400 + i * 90;
+    setTimeout(() => {
+      tile.style.transition = 'transform 0.45s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease';
+      tile.style.opacity = '1';
+      tile.style.transform = 'scale(1)';
+    }, delay);
+  });
+
+  // Phase 3: collapse tiles to vertical strip, bg fades to white
+  setTimeout(() => {
+    introEl.style.transition = 'background 0.8s ease';
+    introEl.style.background = 'rgba(255,255,255,0.9)';
+    introIcon.style.opacity = '0';
+
+    document.querySelectorAll('.intro-tile').forEach((tile, i) => {
+      const w = imageTrack.offsetWidth || 940;
+      const cx = vw / 2 - w / 2 + 10;
+      const oh = parseInt(tile.style.height);
+      const targetTop = vh / 2 - oh / 2 + (i - 6) * (oh + 12);
+
+      tile.style.transition = 'left 0.6s ease, top 0.6s ease, width 0.6s ease, opacity 0.5s ease';
+      tile.style.left  = `${cx}px`;
+      tile.style.top   = `${targetTop}px`;
+      tile.style.width = `${w - 20}px`;
     });
+  }, 1700);
+
+  // Phase 4: reveal main layout
+  setTimeout(() => {
+    introEl.style.transition = 'opacity 0.7s ease';
+    introEl.style.opacity = '0';
+    topNav.classList.add('visible');
+    leftCol.classList.add('visible');
+    rightCol.classList.add('visible');
+    pgToggle.classList.add('visible');
+  }, 2600);
+
+  // Phase 5: complete
+  setTimeout(() => {
+    introEl.style.display = 'none';
+    document.body.classList.remove('intro-running');
+    state.scrollEnabled = true;
+    state.introComplete = true;
+    updateLists();
+  }, 3300);
+}
+
+/* ── ACTIVE INDEX DETECTION ─────────────────────────────────── */
+function getActiveIndex() {
+  const wraps = imageTrack.querySelectorAll('.img-wrap');
+  const mid   = window.scrollY + window.innerHeight / 2;
+  let   best  = 0;
+  let   bestD = Infinity;
+
+  wraps.forEach((w, i) => {
+    const top    = w.offsetTop;
+    const center = top + w.offsetHeight / 2;
+    const d      = Math.abs(center - mid);
+    if (d < bestD) { bestD = d; best = i; }
   });
-  parallaxY = new Array(metrics.length).fill(0);
-}
 
-// The DOM index where the real item 0 starts (= CLONE_COUNT)
-function realStart() { return CLONE_COUNT; }
-
-/* Precompute active/inactive heights once (and on resize).
-   Uses throw-away elements with transition disabled so we always
-   get the final intended height, never a mid-transition value. */
-function precomputeHeights() {
-  function measureClass(cls) {
-    const div = document.createElement('div');
-    div.className = `slide ${cls}`;
-    div.style.cssText = 'position:absolute;visibility:hidden;transition:none;pointer-events:none;';
-    document.body.appendChild(div);
-    const h = div.getBoundingClientRect().height;
-    document.body.removeChild(div);
-    return h;
-  }
-  SLIDE_H.active   = measureClass('slide--active');
-  SLIDE_H.inactive = measureClass('slide--inactive');
-}
-
-// Get target trackY so DOM slide [domIdx] is centered in viewport.
-// Uses precomputed heights — immune to CSS transition intermediate values.
-function getTargetY(domIdx) {
-  const viewH = filmClipper.offsetHeight;
-  let offset = 0;
-  for (let i = 0; i < domIdx; i++) {
-    const h = metrics[i].realIndex === activeReal ? SLIDE_H.active : SLIDE_H.inactive;
-    offset += h + CFG.imageGap;
-  }
-  const slideH = metrics[domIdx].realIndex === activeReal ? SLIDE_H.active : SLIDE_H.inactive;
-  return -(offset + slideH / 2 - viewH / 2);
-}
-
-// Pre-allocated positions cache — reused every frame to avoid GC churn
-let posCache = [];
-
-// Build all center-Y values in ONE O(n) pass.
-// getTargetY(i) is O(n) itself, so calling it n times = O(n²).
-// This replaces that pattern everywhere in the hot RAF loop.
-function buildPositions() {
-  if (posCache.length !== metrics.length) posCache = new Array(metrics.length);
-  const viewH = filmClipper.offsetHeight;
-  let offset  = 0;
-  for (let i = 0; i < metrics.length; i++) {
-    // Use the live lerped visual height — always matches what's rendered on screen
-    const h    = visualH[metrics[i].realIndex] ?? SLIDE_H.inactive;
-    posCache[i] = -(offset + h / 2 - viewH / 2);
-    offset     += h + CFG.imageGap;
-  }
-  return posCache;
-}
-
-// Find which DOM index is closest to current trackY.
-// Accepts a pre-built positions array (fast path from tick);
-// builds its own if called cold (e.g. from snap).
-function findNearest(pos) {
-  if (!pos) pos = buildPositions();
-  let best = realStart(), bestDist = Infinity;
-  for (let i = 0; i < metrics.length; i++) {
-    const dist = Math.abs(pos[i] - trackY);
-    if (dist < bestDist) { bestDist = dist; best = i; }
-  }
   return best;
 }
 
-// Convert dom index → real index
-function domToReal(domIdx) {
-  return metrics[domIdx].realIndex;
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   SVG CLIP-PATH  (barrel d>0, pincushion d<0)
-
-   The clipper element is (active-w + 2×barrelMax) wide.
-   At rest the clip-path shows the central active-w strip.
-   d drives how much the sides bow in/out.
-   ════════════════════════════════════════════════════════════════════ */
-const BARREL_MAX = CFG.barrelMax;
-
-function updateClipPath(d) {
-  const W = filmClipper.offsetWidth;
-  const H = filmClipper.offsetHeight;
-  if (!W || !H) return;
-
-  // Clamp
-  d = Math.max(-BARREL_MAX, Math.min(BARREL_MAX, d));
-
-  // Margin at rest (how far in from each side the clip sits)
-  const margin = BARREL_MAX;
-
-  // Corners (fixed, don't move with distortion)
-  const x0 = margin;
-  const x1 = W - margin;
-
-  // Midpoint bow:
-  // Barrel (d > 0): left bows LEFT (x0-d), right bows RIGHT (x1+d) → lens shape
-  // Pincushion (d < 0): left bows RIGHT (x0-d = x0+|d|), right bows LEFT (x1+d = x1-|d|) → hourglass
-  const xL = x0 - d;
-  const xR = x1 + d;
-
-  // Top/bottom edges stay perfectly straight — only left/right bow.
-  // (Adding cy here caused the "wavy" effect on the image tops/bottoms.)
-  const path = [
-    // Start top-left corner
-    `M ${x0},0`,
-    // Top edge → top-right corner (straight line via coincident control points)
-    `C ${x0 + (x1-x0)*0.33},0`,
-    `  ${x0 + (x1-x0)*0.66},0`,
-    `  ${x1},0`,
-    // Right edge → bottom-right (bows right for barrel, left for pincushion)
-    `C ${xR},${H*0.33}`,
-    `  ${xR},${H*0.66}`,
-    `  ${x1},${H}`,
-    // Bottom edge → bottom-left (straight line)
-    `C ${x0 + (x1-x0)*0.66},${H}`,
-    `  ${x0 + (x1-x0)*0.33},${H}`,
-    `  ${x0},${H}`,
-    // Left edge → top-left (bows left for barrel, right for pincushion)
-    `C ${xL},${H*0.66}`,
-    `  ${xL},${H*0.33}`,
-    `  ${x0},0`,
-    `Z`,
-  ].join(' ');
-
-  clipEl.setAttribute('d', path);
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   ACTIVE STATE
-   ════════════════════════════════════════════════════════════════════ */
-function setActive(realIdx) {
-  if (realIdx === activeReal) return;
-  activeReal = realIdx;
-  refreshActiveClasses();
-}
-
-function refreshActiveClasses() {
-  // Slides — mark all DOM slides matching the active real index
-  filmTrack.querySelectorAll('.slide').forEach(s => {
-    const isAct = parseInt(s.dataset.realIndex) === activeReal;
-    s.classList.toggle('slide--active',   isAct);
-    s.classList.toggle('slide--inactive', !isAct);
-  });
-
-  // Left list
-  leftTrack.querySelectorAll('.list__item').forEach(item => {
-    item.classList.toggle('is-active', parseInt(item.dataset.realIndex) === activeReal);
-  });
-
-  // Right list
-  const activeCat = PROJECTS[activeReal].category;
-  rightTrack.querySelectorAll('.list__item').forEach(item => {
-    item.classList.toggle('is-active', item.dataset.category === activeCat);
-  });
-
-  // Scroll lists
-  const leftActive = leftTrack.querySelector(`[data-real-index="${activeReal}"]`);
-  scrollListTo(leftTrack, leftActive);
-
-  const rightActive = rightTrack.querySelector(`[data-category="${activeCat}"]`);
-  scrollListTo(rightTrack, rightActive);
-}
-
-function scrollListTo(track, activeEl) {
-  if (!activeEl) return;
-  const parentH = track.parentElement.offsetHeight;
-  const y = parentH / 2 - activeEl.offsetTop - activeEl.offsetHeight / 2;
-  gsap.to(track, { y, duration: CFG.listEaseDur, ease: CFG.listEase, overwrite: true });
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   PARALLAX
-   ════════════════════════════════════════════════════════════════════ */
-// pos is optional: pass the frame's pre-built array for O(1) lookups;
-// omit and it builds its own (used by snap's onUpdate).
-// Direct style.transform instead of gsap.set — avoids 15× GSAP overhead/frame.
-function applyParallax(pos) {
-  if (!pos) pos = buildPositions();
-  for (let i = 0; i < metrics.length; i++) {
-    const raw    = (pos[i] - trackY) * CFG.parallaxStr;
-    const target = Math.max(-3.5, Math.min(3.5, raw));
-    parallaxY[i] += (target - parallaxY[i]) * CFG.parallaxLerp;
-    metrics[i].imgEl.style.transform = `translateY(${-10 + parallaxY[i]}%)`;
-  }
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   SNAP + INFINITE LOOP
-   ════════════════════════════════════════════════════════════════════ */
-function snap() {
-  if (isSnapping) return;
-  isSnapping = true;
-  velocity   = 0;
-
-  const targetDom = findNearest();
-  const realIdx   = domToReal(targetDom);
-
-  // Commit the new active state NOW — before computing snapY so that
-  // getTargetY uses the correct (final) SLIDE_H for the incoming active slide.
-  setActive(realIdx);
-
-  const snapY = getTargetY(targetDom);
-
-  // Relax distortion
-  const distortObj = { d: currentD };
-  gsap.to(distortObj, {
-    d:        0,
-    duration: CFG.barrelRelaxDur,
-    ease:     'power2.out',
-    onUpdate() { currentD = distortObj.d; updateClipPath(currentD); },
-  });
-
-  // Animate to snap position
-  const trackObj = { y: trackY };
-  gsap.to(trackObj, {
-    y:        snapY,
-    duration: CFG.snapDuration,
-    ease:     CFG.snapEase,
-    onUpdate() {
-      trackY = trackObj.y;
-      gsap.set(filmTrack, { y: trackY });
-      applyParallax();
-    },
-    onComplete() {
-      isSnapping = false;
-      scrolling  = false;
-
-      // ── Infinite loop teleport (invisible since content is identical)
-      const totalDom  = metrics.length;
-      const realFirst = CLONE_COUNT;
-      const realLast  = CLONE_COUNT + N - 1;
-      const cloneBot  = totalDom - CLONE_COUNT;
-
-      let finalDom = targetDom;
-      if (targetDom < realFirst) {
-        finalDom = realLast - (realFirst - 1 - targetDom);
-      } else if (targetDom > realLast) {
-        finalDom = realFirst + (targetDom - cloneBot);
-      }
-
-      // Always pin to exact center — corrects any rounding drift and handles teleport
-      trackY = getTargetY(finalDom);
-      gsap.set(filmTrack, { y: trackY });
-    },
+/* ── PARALLAX ───────────────────────────────────────────────── */
+function updateParallax() {
+  const parallax = 100;
+  imageTrack.querySelectorAll('.img-wrap').forEach(wrap => {
+    const rect     = wrap.getBoundingClientRect();
+    const progress = (window.innerHeight - rect.top) / (window.innerHeight + rect.height);
+    const offset   = (progress - 0.5) * parallax;
+    wrap.querySelector('img').style.transform = `translateY(${offset}px)`;
   });
 }
 
-/* ════════════════════════════════════════════════════════════════════
-   RAF LOOP
-   ════════════════════════════════════════════════════════════════════ */
-function tick() {
-  requestAnimationFrame(tick);
-  if (isSnapping) return;
+/* ── SIDE LIST UPDATE ───────────────────────────────────────── */
+function updateLists() {
+  const idx = state.activeIndex;
 
-  // Apply friction
-  velocity *= CFG.friction;
-  trackY   += velocity;
+  // Update active class — left
+  leftList.querySelectorAll('li').forEach((li, i) => {
+    li.classList.toggle('is-active', i === idx);
+  });
 
-  // ── LERP VISUAL HEIGHTS ───────────────────────────────────────────
-  // Each real-project index has a current visual height that smoothly
-  // lerps toward its target (active or inactive). This drives BOTH the
-  // DOM inline style AND buildPositions(), so they are always identical —
-  // eliminating the CSS-transition mismatch that caused the glitch.
-  let heightsDirty = false;
-  for (let r = 0; r < N; r++) {
-    const target = r === activeReal ? SLIDE_H.active : SLIDE_H.inactive;
-    const diff   = target - visualH[r];
-    if (Math.abs(diff) > 0.2) {
-      visualH[r] += diff * 0.10;
-      heightsDirty = true;
-    } else if (visualH[r] !== target) {
-      visualH[r]  = target;
-      heightsDirty = true;
-    }
-  }
-  if (heightsDirty) {
-    for (let i = 0; i < metrics.length; i++) {
-      metrics[i].el.style.height = visualH[metrics[i].realIndex] + 'px';
-    }
-  }
+  // Update active class — right
+  const activeCat = PROJECTS[idx].category;
+  rightList.querySelectorAll('li').forEach(li => {
+    li.classList.toggle('is-active', li.dataset.cat === activeCat);
+  });
 
-  // ── Build all positions ONCE this frame — O(n) total instead of O(n²)
-  let pos = buildPositions();
-
-  // ── SEAMLESS LOOP ─────────────────────────────────────────────────
-  // Replace the old hard clamp with a continuous invisible teleport.
-  // One full loop = the Y distance from real item 0 to its bottom clone.
-  // If trackY drifts outside the real-item zone, shift by loopLen so
-  // the visual is identical but we're back inside the real zone.
-  // Fires every RAF frame → no jump is ever visible.
-  const loopLen = pos[CLONE_COUNT] - pos[CLONE_COUNT + N];  // always positive
-  if (trackY < pos[CLONE_COUNT + N - 1]) {
-    trackY += loopLen;   // scrolled past last real item → wrap to top clones
-  } else if (trackY > pos[CLONE_COUNT]) {
-    trackY -= loopLen;   // scrolled past first real item → wrap to bottom clones
-  }
-
-  const absV = Math.abs(velocity);
-
-  // ── SLOT-MACHINE MODE ──────────────────────────────────────────────
-  if (scrolling && absV < CFG.magnetThreshold) {
-    const nearestDom  = findNearest(pos);
-    const nearestReal = domToReal(nearestDom);
-    if (nearestReal !== activeReal) {
-      setActive(nearestReal);
-      pos = buildPositions();  // recompute after height change
-    }
-    trackY += (pos[nearestDom] - trackY) * CFG.magnetStrength;
-  }
-
-  gsap.set(filmTrack, { y: trackY });
-
-  // Barrel/pincushion — power-curved
-  const normV   = Math.max(-1, Math.min(1, velocity / CFG.maxVelocity));
-  const curved  = Math.sign(normV) * Math.pow(Math.abs(normV), CFG.barrelCurve);
-  const targetD = -curved * BARREL_MAX;
-  currentD += (targetD - currentD) * CFG.barrelLerp;
-  if (Math.abs(currentD) > 0.5) updateClipPath(currentD);
-
-  // Parallax — pass pre-built pos; direct style.transform (no gsap.set per image)
-  applyParallax(pos);
-
-  // Snap trigger
-  if (scrolling && absV < 0.3) {
-    clearTimeout(snapTimer);
-    snapTimer = setTimeout(snap, CFG.snapIdleMs);
+  if (state.animType === 1) {
+    positionListType1(idx);
+  } else {
+    positionListType2(idx);
   }
 }
 
-/* ════════════════════════════════════════════════════════════════════
-   WHEEL
-   ════════════════════════════════════════════════════════════════════ */
-function initWheel() {
-  window.addEventListener('wheel', e => {
-    e.preventDefault();
-    if (isSnapping) return;
-    scrolling = true;   // ← user is actively scrolling; re-arm snap timer
-    clearTimeout(snapTimer);
+/* TYPE 1 — left list rises from bottom to top ──────────────── */
+function positionListType1(idx) {
+  const itemH    = 23;  // approximate line height per item
+  const center   = window.innerHeight / 2;
+  const listTop  = leftWrap.getBoundingClientRect().top;
+  const targetY  = center - listTop - idx * itemH - itemH / 2;
 
-    let delta = e.deltaY;
-    if (e.deltaMode === 1) delta *= 28;
-    if (e.deltaMode === 2) delta *= 500;
+  leftList.style.transition = 'transform 0.5s cubic-bezier(0.25,0.46,0.45,0.94)';
+  leftList.style.transform  = `translateY(${targetY}px)`;
 
-    velocity -= delta * CFG.wheelMult;
-    velocity  = Math.max(-CFG.maxVelocity, Math.min(CFG.maxVelocity, velocity));
-  }, { passive: false });
+  // Right list stays fixed — just centered
+  const rItemH   = 23;
+  const rItems   = rightList.querySelectorAll('li');
+  const rIdx     = [...rItems].findIndex(li => li.classList.contains('is-active'));
+  const rCenter  = window.innerHeight / 2;
+  const rListTop = rightWrap.getBoundingClientRect().top;
+  const rTargetY = rCenter - rListTop - rIdx * rItemH - rItemH / 2;
+
+  rightList.style.transition = 'transform 0.5s cubic-bezier(0.25,0.46,0.45,0.94)';
+  rightList.style.transform  = `translateY(${rTargetY}px)`;
 }
 
-/* ════════════════════════════════════════════════════════════════════
-   SIZE CLIPPER & CLIP PATH
-   ════════════════════════════════════════════════════════════════════ */
-function sizeClipper() {
-  // Width/height set in CSS (active-w + 2*barrel-max × 100vh)
-  // Just draw the resting clip-path
-  updateClipPath(0);
+/* TYPE 2 — both lists: active stays centered ───────────────── */
+function positionListType2(idx) {
+  const itemH    = 23;
+  const center   = window.innerHeight / 2;
+
+  // Left
+  const lListTop = leftWrap.getBoundingClientRect().top;
+  const lTargetY = center - lListTop - idx * itemH - itemH / 2;
+  leftList.style.transition = 'transform 0.5s cubic-bezier(0.25,0.46,0.45,0.94)';
+  leftList.style.transform  = `translateY(${lTargetY}px)`;
+
+  // Right — active category centered
+  const rItems   = [...rightList.querySelectorAll('li')];
+  const rIdx     = rItems.findIndex(li => li.classList.contains('is-active'));
+  const rListTop = rightWrap.getBoundingClientRect().top;
+  const rTargetY = center - rListTop - rIdx * itemH - itemH / 2;
+  rightList.style.transition = 'transform 0.5s cubic-bezier(0.25,0.46,0.45,0.94)';
+  rightList.style.transform  = `translateY(${rTargetY}px)`;
 }
 
-/* ════════════════════════════════════════════════════════════════════
-   INIT
-   ════════════════════════════════════════════════════════════════════ */
+/* ── PROGRESS INDICATOR ─────────────────────────────────────── */
+function updateProgress() {
+  const docH   = document.documentElement.scrollHeight - window.innerHeight;
+  const pct    = docH > 0 ? Math.round((window.scrollY / docH) * 100) : 0;
+  const rangeW = 100; // px of horizontal drift
+
+  progressEl.textContent = `${pct}%`;
+  progressEl.style.transform = `translateX(${(pct / 100) * rangeW}px)`;
+}
+
+/* ── BOTTOM NAV ─────────────────────────────────────────────── */
+let navShown = false;
+function updateBottomNav() {
+  if (!navShown && window.scrollY > 80) {
+    navShown = true;
+    bottomNav.classList.add('visible');
+  }
+}
+
+/* ── SCROLL HANDLER ─────────────────────────────────────────── */
+function onScroll() {
+  if (!state.scrollEnabled) return;
+
+  const idx = getActiveIndex();
+  if (idx !== state.activeIndex) {
+    state.activeIndex = idx;
+    updateLists();
+  }
+
+  updateParallax();
+  updateProgress();
+  updateBottomNav();
+}
+
+/* ── PLAYGROUND ─────────────────────────────────────────────── */
+pgToggle.addEventListener('click', () => {
+  pgPanel.classList.toggle('open');
+});
+
+// Close panel when clicking outside
+document.addEventListener('click', e => {
+  if (!pgPanel.contains(e.target) && e.target !== pgToggle) {
+    pgPanel.classList.remove('open');
+  }
+});
+
+// Animation type buttons
+pgPanel.querySelectorAll('.pg-btn[data-anim]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    pgPanel.querySelectorAll('.pg-btn[data-anim]').forEach(b => b.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    state.animType = parseInt(btn.dataset.anim);
+    // Reset list transitions and reposition
+    leftList.style.transition  = 'none';
+    rightList.style.transition = 'none';
+    updateLists();
+  });
+});
+
+// Gap slider
+gapSlider.addEventListener('input', () => {
+  state.gap = parseInt(gapSlider.value);
+  gapVal.textContent = `${state.gap}px`;
+  imageTrack.style.gap = `${state.gap}px`;
+});
+
+// Z-index toggle
+zindexCb.addEventListener('change', () => {
+  state.zindex = zindexCb.checked;
+  document.body.classList.toggle('zindex-on', state.zindex);
+  zindexLbl.textContent = state.zindex ? 'On' : 'Off';
+});
+
+/* ── INIT ───────────────────────────────────────────────────── */
 function init() {
-  buildDOM();
+  buildLists();
+  buildTrack();
 
-  requestAnimationFrame(() => {
-    measure();
-    precomputeHeights();
-    // Initialise visualH to final heights (no transition on load)
-    visualH = Array.from({ length: N }, (_, r) =>
-      r === activeReal ? SLIDE_H.active : SLIDE_H.inactive
-    );
-    sizeClipper();
+  // Apply initial body class for z-index
+  document.body.classList.add('zindex-on');
 
-    // Start centered on the first REAL item (DOM index = CLONE_COUNT)
-    trackY = getTargetY(realStart());
-    gsap.set(filmTrack, { y: trackY });
+  // Initial list positions (off-screen below center — they reveal after intro)
+  leftList.style.transform  = `translateY(${window.innerHeight}px)`;
+  rightList.style.transform = `translateY(${window.innerHeight}px)`;
 
-    // Init list positions
-    refreshActiveClasses();
+  window.addEventListener('scroll', onScroll, { passive: true });
 
-    // Start loop + wheel
-    tick();
-    initWheel();
-
-    window.addEventListener('resize', () => {
-      measure();
-      precomputeHeights();
-      visualH = Array.from({ length: N }, (_, r) =>
-        r === activeReal ? SLIDE_H.active : SLIDE_H.inactive
-      );
-      sizeClipper();
-      trackY = getTargetY(realStart() + activeReal);
-      velocity = 0;
-      gsap.set(filmTrack, { y: trackY });
-    });
-  });
+  // Small delay so fonts/layout settle before intro
+  setTimeout(runIntro, 100);
 }
 
-init();
+document.addEventListener('DOMContentLoaded', init);

@@ -1,62 +1,107 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Kharche</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kharche & Associates</title>
+  <link rel="icon" href="assets/karche-favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="intro-running">
 
-  <!-- NAV -->
-  <nav class="nav">
-    <span class="nav__brand">Kharche</span>
-    <span class="nav__sub">Selected Work</span>
+  <!-- ── INTRO OVERLAY ─────────────────────────────── -->
+  <div id="intro">
+    <div id="intro-icon">
+      <img src="assets/karche-favicon.svg" alt="">
+    </div>
+    <div id="intro-tiles"></div>
+  </div>
+
+  <!-- ── TOP NAV ───────────────────────────────────── -->
+  <nav id="top-nav">
+    <a class="nav-logo" href="#">
+      <img src="assets/kharche-logo.svg" alt="Kharche & Associates">
+    </a>
+    <span class="nav-tagline">Driven By Design</span>
+    <div class="nav-center">
+      <span>About Us</span>
+      <span>All Projects &nbsp;<span class="nav-slide">Slide</span><span class="nav-sep"> / </span><span class="nav-grid">Grid</span></span>
+    </div>
+    <span class="nav-contact">Contact Us</span>
   </nav>
 
-  <!-- MAIN GALLERY -->
-  <main class="gallery">
+  <!-- ── SHELL ─────────────────────────────────────── -->
+  <div id="shell">
 
-    <!-- LEFT LIST (sub-projects / children) -->
-    <aside class="list list--left" aria-label="Projects">
-      <div class="list__track" id="leftTrack">
-        <!-- JS populated -->
+    <div id="left-col">
+      <div id="left-list-wrap"><ul id="left-list"></ul></div>
+      <div id="featured-label">/Featured</div>
+      <div id="progress-pct">0%</div>
+    </div>
+
+    <div id="center-strip">
+      <div id="image-track"></div>
+    </div>
+
+    <div id="right-col">
+      <div id="right-list-wrap"><ul id="right-list"></ul></div>
+    </div>
+
+  </div>
+
+  <!-- ── FOOTER ─────────────────────────────────────── -->
+  <footer id="site-footer">
+    <div class="footer-l">
+      <span>&#169; 2026</span>
+      <span>Privacy Policy</span>
+    </div>
+    <div class="footer-r">Designed By Wings</div>
+  </footer>
+
+  <!-- ── BOTTOM NAV ────────────────────────────────── -->
+  <div id="bottom-nav">
+    <div class="bnav-l">
+      <img src="assets/karche-favicon.svg" alt="" class="bnav-icon">
+      <span>Driven by design</span>
+    </div>
+    <div class="bnav-r">
+      <button class="bnav-btn is-active">Home</button>
+      <button class="bnav-btn">Projects</button>
+      <button class="bnav-btn">About</button>
+    </div>
+  </div>
+
+  <!-- ── PLAYGROUND ────────────────────────────────── -->
+  <button id="pg-toggle">PLAYGROUND</button>
+  <div id="pg-panel">
+    <div class="pg-head">Playground</div>
+
+    <div class="pg-row">
+      <div class="pg-label">Animation</div>
+      <div class="pg-btns">
+        <button class="pg-btn is-active" data-anim="1">Type 1</button>
+        <button class="pg-btn" data-anim="2">Type 2</button>
       </div>
-    </aside>
+    </div>
 
-    <!-- CENTER FILMSTRIP -->
-    <section class="filmstrip" aria-label="Gallery">
-      <!-- SVG clip-path definition -->
-      <svg class="clip-svg" width="0" height="0" aria-hidden="true">
-        <defs>
-          <clipPath id="filmClip" clipPathUnits="userSpaceOnUse">
-            <path id="filmClipPath" />
-          </clipPath>
-        </defs>
-      </svg>
+    <div class="pg-row">
+      <div class="pg-label">Image Gap &nbsp;<span id="gap-val">24px</span></div>
+      <input type="range" id="gap-slider" min="0" max="80" value="24" step="2">
+    </div>
 
-      <!-- The clipped container -->
-      <div class="filmstrip__clipper" id="filmClipper">
-        <div class="filmstrip__track" id="filmTrack">
-          <!-- JS populated -->
-        </div>
-      </div>
-    </section>
+    <div class="pg-row">
+      <div class="pg-label">Z-Index Layering</div>
+      <label class="pg-switch">
+        <input type="checkbox" id="zindex-cb" checked>
+        <span class="pg-track"><span class="pg-thumb"></span></span>
+        <span class="pg-switch-lbl" id="zindex-lbl">On</span>
+      </label>
+    </div>
+  </div>
 
-    <!-- RIGHT LIST (parent categories) -->
-    <aside class="list list--right" aria-label="Categories">
-      <div class="list__track" id="rightTrack">
-        <!-- JS populated -->
-      </div>
-    </aside>
-
-  </main>
-
-  <!-- LIBRARIES -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <script src="main.js"></script>
 </body>
 </html>

@@ -1,0 +1,167 @@
+/* ─── RESET ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          #F5F2EE;
+  --fg:          #1a1a1a;
+  --muted:       0.22;           /* inactive list opacity */
+  --font:        'IBM Plex Mono', monospace;
+  --gap:         20px;
+
+  /* Visual sizes of the images */
+  --active-w:    42vw;
+  --inactive-w:  calc(var(--active-w) * 0.70);
+  --active-h:    calc(var(--active-w) * 9 / 16);
+  --inactive-h:  calc(var(--inactive-w) * 9 / 16);  /* all landscape */
+
+  /* Barrel max expansion (clipper is wider by this × 2) */
+  --barrel-max:  130px;
+}
+
+html, body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+/* ─── NAV ───────────────────────────────────────────────────────── */
+.nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: space-between;
+  padding: 24px 40px;
+  pointer-events: none;
+}
+.nav__brand { font-weight: 400; text-transform: uppercase; }
+.nav__sub   { opacity: 0.35; font-weight: 300; text-transform: uppercase; }
+
+/* ─── GALLERY WRAPPER ───────────────────────────────────────────── */
+.gallery {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;   /* vertically centers the flex children */
+}
+
+/* ─── SIDE LISTS ────────────────────────────────────────────────── */
+.list {
+  width: 15vw;
+  flex-shrink: 0;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  /* DO NOT use align-items/justify-content here — GSAP handles track position */
+  z-index: 10;           /* sits on top of barrel overflow */
+}
+
+.list__track {
+  position: absolute;   /* GSAP moves it via translateY */
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  will-change: transform;
+}
+
+/* Align text within each column */
+.list--left  .list__track { left:  20px; text-align: left; }
+.list--right .list__track { right: 20px; text-align: right; }
+
+.list__item {
+  opacity: var(--muted);
+  transition: opacity 0.5s ease;
+  text-transform: uppercase;
+  line-height: 1.2;
+  white-space: nowrap;
+  user-select: none;
+  cursor: default;
+}
+.list__item.is-active { opacity: 1; }
+
+/* ─── FILMSTRIP ─────────────────────────────────────────────────── */
+.filmstrip {
+  flex: 1;               /* takes the remaining 70vw (100vw − 15vw − 15vw) */
+  height: 100vh;
+  position: relative;
+  overflow: visible;     /* ← allows barrel sides to spill out */
+  z-index: 1;
+}
+
+/* Hidden SVG for clip-path definition */
+.clip-svg {
+  position: absolute;
+  width: 0; height: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* ─── CLIPPER — wider than filmstrip for barrel expansion ───────── */
+.filmstrip__clipper {
+  position: absolute;
+  /* Wider than the active image by 2×barrel-max */
+  width:  calc(var(--active-w) + var(--barrel-max) * 2);
+  height: 100vh;
+  /* Always centered inside the filmstrip, regardless of filmstrip width */
+  left:   calc(50% - var(--active-w) / 2 - var(--barrel-max));
+  top: 0;
+  clip-path: url(#filmClip);
+  will-change: clip-path;
+}
+
+/* ─── TRACK ─────────────────────────────────────────────────────── */
+.filmstrip__track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap);
+  will-change: transform;
+}
+
+/* ─── SLIDES ─────────────────────────────────────────────────────── */
+.slide {
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+  /* No CSS height transition — height is driven entirely by JS (visualH lerp in tick)
+     so position math and visual are always identical. CSS transition caused a 500ms
+     mismatch between buildPositions() and the actual rendered height. */
+}
+
+.slide--active {
+  /* Fill the full clipper width so barrel clipping is visible */
+  width:  calc(var(--active-w) + var(--barrel-max) * 2);
+  height: var(--active-h);
+}
+
+.slide--inactive {
+  /* Same width as active — barrel clip-path bows ALL slides, not just active */
+  width:  calc(var(--active-w) + var(--barrel-max) * 2);
+  height: var(--inactive-h);
+}
+
+.slide__img {
+  width: 100%;
+  height: 120%;               /* extra height room for parallax travel */
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+  pointer-events: none;
+  will-change: transform;
+  transform: translateY(-10%);
+}
+
+/* ─── HIDE SCROLLBAR ────────────────────────────────────────────── */
+::-webkit-scrollbar { display: none; }
