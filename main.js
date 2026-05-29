@@ -31,6 +31,7 @@ const state = {
   activeIndex:   0,
   animType:      1,       // 1 or 2
   gap:           24,
+  parallax:      100,
   zindex:        true,
   scrollEnabled: false,
   introComplete: false,
@@ -58,15 +59,17 @@ const progressEl  = $('progress-pct');
 const bottomNav   = $('bottom-nav');
 const pgToggle    = $('pg-toggle');
 const pgPanel     = $('pg-panel');
-const gapSlider   = $('gap-slider');
-const gapVal      = $('gap-val');
-const sizeSlider  = $('size-slider');
-const sizeVal     = $('size-val');
-const zindexCb    = $('zindex-cb');
-const zindexLbl   = $('zindex-lbl');
+const gapSlider      = $('gap-slider');
+const gapVal         = $('gap-val');
+const sizeSlider     = $('size-slider');
+const sizeVal        = $('size-val');
+const parallaxSlider = $('parallax-slider');
+const parallaxVal    = $('parallax-val');
+const zindexCb       = $('zindex-cb');
+const zindexLbl      = $('zindex-lbl');
 
 // Base image dimensions (100% scale)
-const BASE = { lsW: 940, lsH: 530, ptW: 640, ptH: 860 };
+const BASE = { lsW: 940, lsH: 530, ptW: 640, ptH: 860, parallax: 100 };
 
 /* ── BUILD SIDE LISTS ───────────────────────────────────────── */
 function buildLists() {
@@ -284,13 +287,19 @@ function getActiveIndex() {
 
 /* ── PARALLAX ───────────────────────────────────────────────── */
 function updateParallax() {
-  const parallax = 100;
   imageTrack.querySelectorAll('.img-wrap').forEach(wrap => {
     const rect     = wrap.getBoundingClientRect();
     const progress = (window.innerHeight - rect.top) / (window.innerHeight + rect.height);
-    const offset   = (progress - 0.5) * parallax;
+    const offset   = (progress - 0.5) * state.parallax;
     wrap.querySelector('img').style.transform = `translateY(${offset}px)`;
   });
+}
+
+function setParallax(px) {
+  state.parallax = px;
+  document.documentElement.style.setProperty('--parallax', `${px}px`);
+  parallaxSlider.value  = px;
+  parallaxVal.textContent = `${px}px`;
 }
 
 /* ── SIDE LIST UPDATE ───────────────────────────────────────── */
@@ -417,7 +426,7 @@ pgPanel.querySelectorAll('.pg-btn[data-anim]').forEach(btn => {
   });
 });
 
-// Size slider
+// Size slider — also auto-scales parallax proportionally
 sizeSlider.addEventListener('input', () => {
   const s = parseInt(sizeSlider.value) / 100;
   sizeVal.textContent = `${sizeSlider.value}%`;
@@ -426,6 +435,13 @@ sizeSlider.addEventListener('input', () => {
   root.setProperty('--ls-h', `${Math.round(BASE.lsH * s)}px`);
   root.setProperty('--pt-w', `${Math.round(BASE.ptW * s)}px`);
   root.setProperty('--pt-h', `${Math.round(BASE.ptH * s)}px`);
+  setParallax(Math.round(BASE.parallax * s));
+});
+
+// Parallax slider — manual override
+parallaxSlider.addEventListener('input', () => {
+  setParallax(parseInt(parallaxSlider.value));
+  updateParallax();
 });
 
 // Gap slider
