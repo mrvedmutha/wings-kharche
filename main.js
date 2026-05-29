@@ -230,18 +230,9 @@ function runIntro() {
   const cascadeDone = stripDone + 250 + 750 + (PROJECTS.length - 1) * 22;
 
   setTimeout(() => {
-    introEl.style.transition = 'opacity 0.55s ease';
-    introEl.style.opacity    = '0';
-
-    // Remove overflow: hidden so scroll restoration works,
-    // then jump while the overlay is still fading (fixed overlay hides the jump)
+    // Step 1: remove scroll lock + restore position while overlay is still FULLY opaque
     document.body.classList.remove('intro-running');
     window.scrollTo({ top: savedScroll, behavior: 'instant' });
-
-    topNav.classList.add('visible');
-    leftCol.classList.add('visible');
-    rightCol.classList.add('visible');
-    pgToggle.classList.add('visible');
 
     state.scrollEnabled = true;
     state.activeIndex   = getActiveIndex();
@@ -249,6 +240,16 @@ function runIntro() {
     updateParallax();
     updateProgress();
     updateBottomNav();
+
+    // Step 2: one frame later — scroll is committed, NOW start the fade
+    requestAnimationFrame(() => {
+      introEl.style.transition = 'opacity 0.55s ease';
+      introEl.style.opacity    = '0';
+      topNav.classList.add('visible');
+      leftCol.classList.add('visible');
+      rightCol.classList.add('visible');
+      pgToggle.classList.add('visible');
+    });
   }, cascadeDone + 100);
 
   // Phase 8 — remove overlay element
