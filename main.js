@@ -186,8 +186,9 @@ function runIntro() {
       // landscape tiles (wider) and portrait tiles (narrower) remain distinct
 
       const delay = i * 32;
-      tile.style.transition = `transform 0.55s cubic-bezier(0.25,0.46,0.45,0.94) ${delay}ms`;
+      tile.style.transition = `transform 0.55s cubic-bezier(0.25,0.46,0.45,0.94) ${delay}ms, opacity 0.4s ease ${delay}ms`;
       tile.style.transform  = `translate(0px, ${dy}px) scale(${s})`;
+      tile.style.opacity    = '1';
     });
   }, allDone + 380);
 
