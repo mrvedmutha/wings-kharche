@@ -99,11 +99,13 @@ function runIntro() {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
-  // Thumbnail stack size & position (centred on screen)
-  const TW = 300;
-  const TH = 190;
-  const tx = vw / 2 - TW / 2;
-  const ty = vh / 2 - TH / 2;
+  // Thumbnail height is fixed; width follows each image's aspect ratio
+  const THUMB_H = 180;
+  const tileW   = p => p.orient === 'landscape'
+    ? Math.round(THUMB_H * 16 / 9)   // ~320px
+    : Math.round(THUMB_H * 2  / 3);  // ~120px
+  const cx = vw / 2;
+  const cy = vh / 2;
 
   // Phase 1 — logo scales in
   setTimeout(() => {
@@ -124,13 +126,14 @@ function runIntro() {
   const POP_START = 900;
 
   PROJECTS.forEach((p, i) => {
+    const tw   = tileW(p);
     const tile = document.createElement('div');
     tile.className = 'intro-tile';
     Object.assign(tile.style, {
-      left:      `${tx}px`,
-      top:       `${ty}px`,
-      width:     `${TW}px`,
-      height:    `${TH}px`,
+      left:      `${cx - tw / 2}px`,
+      top:       `${cy - THUMB_H / 2}px`,
+      width:     `${tw}px`,
+      height:    `${THUMB_H}px`,
       opacity:   '0.75',
       transform: 'scale(0)',
       zIndex:    String(i + 1),
@@ -165,23 +168,21 @@ function runIntro() {
 
     // Scale tiles down to fit all of them in the viewport height
     const GAP     = 5;
-    const scale   = Math.min(0.38, (vh * 0.82 - (n - 1) * GAP) / (n * TH));
-    const scaledH = TH * scale;
+    // Uniform scale so the strip fits in the viewport
+    const s       = Math.min(1, (vh * 0.85 - (n - 1) * GAP) / (n * THUMB_H));
+    const scaledH = THUMB_H * s;
     const totalH  = n * scaledH + (n - 1) * GAP;
     const stripTop = (vh - totalH) / 2;
 
-    // Tile centre in the stack (all at same position)
-    const stackCX = tx + TW / 2;
-    const stackCY = ty + TH / 2;
-
     tiles.forEach((tile, i) => {
       const centerY = stripTop + i * (scaledH + GAP) + scaledH / 2;
-      const dy      = centerY - stackCY;      // vertical offset from stack centre
-      // dx = 0 — all horizontally centred
+      const dy      = centerY - cy;   // offset from stack centre (cy)
+      // dx = 0: tiles stay horizontally centred
+      // landscape tiles (wider) and portrait tiles (narrower) remain distinct
 
-      const delay = i * 35;
+      const delay = i * 32;
       tile.style.transition = `transform 0.55s cubic-bezier(0.25,0.46,0.45,0.94) ${delay}ms`;
-      tile.style.transform  = `translate(0px, ${dy}px) scale(${scale})`;
+      tile.style.transform  = `translate(0px, ${dy}px) scale(${s})`;
     });
   }, allDone + 380);
 
