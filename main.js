@@ -60,8 +60,13 @@ const pgToggle    = $('pg-toggle');
 const pgPanel     = $('pg-panel');
 const gapSlider   = $('gap-slider');
 const gapVal      = $('gap-val');
+const sizeSlider  = $('size-slider');
+const sizeVal     = $('size-val');
 const zindexCb    = $('zindex-cb');
 const zindexLbl   = $('zindex-lbl');
+
+// Base image dimensions (100% scale)
+const BASE = { lsW: 940, lsH: 530, ptW: 640, ptH: 860 };
 
 /* ── BUILD SIDE LISTS ───────────────────────────────────────── */
 function buildLists() {
@@ -410,6 +415,17 @@ pgPanel.querySelectorAll('.pg-btn[data-anim]').forEach(btn => {
     rightList.style.transition = 'none';
     updateLists();
   });
+});
+
+// Size slider
+sizeSlider.addEventListener('input', () => {
+  const s = parseInt(sizeSlider.value) / 100;
+  sizeVal.textContent = `${sizeSlider.value}%`;
+  const root = document.documentElement.style;
+  root.setProperty('--ls-w', `${Math.round(BASE.lsW * s)}px`);
+  root.setProperty('--ls-h', `${Math.round(BASE.lsH * s)}px`);
+  root.setProperty('--pt-w', `${Math.round(BASE.ptW * s)}px`);
+  root.setProperty('--pt-h', `${Math.round(BASE.ptH * s)}px`);
 });
 
 // Gap slider
