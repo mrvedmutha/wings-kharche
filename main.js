@@ -245,13 +245,14 @@ function runIntro() {
 /* ── ACTIVE INDEX DETECTION ─────────────────────────────────── */
 function getActiveIndex() {
   const wraps = imageTrack.querySelectorAll('.img-wrap');
-  const mid   = window.scrollY + window.innerHeight / 2;
+  const vh    = window.innerHeight;
+  const mid   = window.scrollY + vh / 2;
   let   best  = 0;
   let   bestD = Infinity;
 
   wraps.forEach((w, i) => {
-    const top    = w.offsetTop;
-    const center = top + w.offsetHeight / 2;
+    const rect   = w.getBoundingClientRect();
+    const center = window.scrollY + rect.top + rect.height / 2;
     const d      = Math.abs(center - mid);
     if (d < bestD) { bestD = d; best = i; }
   });
@@ -292,46 +293,39 @@ function updateLists() {
   }
 }
 
-/* TYPE 1 — left list rises from bottom to top ──────────────── */
-function positionListType1(idx) {
-  const itemH    = 23;  // approximate line height per item
-  const center   = window.innerHeight / 2;
-  const listTop  = leftWrap.getBoundingClientRect().top;
-  const targetY  = center - listTop - idx * itemH - itemH / 2;
-
-  leftList.style.transition = 'transform 0.5s cubic-bezier(0.25,0.46,0.45,0.94)';
-  leftList.style.transform  = `translateY(${targetY}px)`;
-
-  // Right list stays fixed — just centered
-  const rItemH   = 23;
-  const rItems   = rightList.querySelectorAll('li');
-  const rIdx     = [...rItems].findIndex(li => li.classList.contains('is-active'));
-  const rCenter  = window.innerHeight / 2;
-  const rListTop = rightWrap.getBoundingClientRect().top;
-  const rTargetY = rCenter - rListTop - rIdx * rItemH - rItemH / 2;
-
-  rightList.style.transition = 'transform 0.5s cubic-bezier(0.25,0.46,0.45,0.94)';
-  rightList.style.transform  = `translateY(${rTargetY}px)`;
+/* ── LIST POSITIONING HELPERS ───────────────────────────────── */
+function listTargetY(list, wrap, activeIdx) {
+  const items  = [...list.querySelectorAll('li')];
+  if (!items.length) return 0;
+  // Measure real item height once (all items are identical style)
+  const itemH  = items[0].getBoundingClientRect().height;
+  const center = window.innerHeight / 2;
+  const top    = wrap.getBoundingClientRect().top;
+  return center - top - activeIdx * itemH - itemH / 2;
 }
 
-/* TYPE 2 — both lists: active stays centered ───────────────── */
+const LIST_EASE = 'transform 0.5s cubic-bezier(0.25,0.46,0.45,0.94)';
+
+/* TYPE 1 — left list rises bottom→top, right list centers on active cat */
+function positionListType1(idx) {
+  leftList.style.transition  = LIST_EASE;
+  leftList.style.transform   = `translateY(${listTargetY(leftList, leftWrap, idx)}px)`;
+
+  const rItems = [...rightList.querySelectorAll('li')];
+  const rIdx   = rItems.findIndex(li => li.classList.contains('is-active'));
+  rightList.style.transition = LIST_EASE;
+  rightList.style.transform  = `translateY(${listTargetY(rightList, rightWrap, rIdx)}px)`;
+}
+
+/* TYPE 2 — both lists: active item stays at viewport center */
 function positionListType2(idx) {
-  const itemH    = 23;
-  const center   = window.innerHeight / 2;
+  leftList.style.transition  = LIST_EASE;
+  leftList.style.transform   = `translateY(${listTargetY(leftList, leftWrap, idx)}px)`;
 
-  // Left
-  const lListTop = leftWrap.getBoundingClientRect().top;
-  const lTargetY = center - lListTop - idx * itemH - itemH / 2;
-  leftList.style.transition = 'transform 0.5s cubic-bezier(0.25,0.46,0.45,0.94)';
-  leftList.style.transform  = `translateY(${lTargetY}px)`;
-
-  // Right — active category centered
-  const rItems   = [...rightList.querySelectorAll('li')];
-  const rIdx     = rItems.findIndex(li => li.classList.contains('is-active'));
-  const rListTop = rightWrap.getBoundingClientRect().top;
-  const rTargetY = center - rListTop - rIdx * itemH - itemH / 2;
-  rightList.style.transition = 'transform 0.5s cubic-bezier(0.25,0.46,0.45,0.94)';
-  rightList.style.transform  = `translateY(${rTargetY}px)`;
+  const rItems = [...rightList.querySelectorAll('li')];
+  const rIdx   = rItems.findIndex(li => li.classList.contains('is-active'));
+  rightList.style.transition = LIST_EASE;
+  rightList.style.transform  = `translateY(${listTargetY(rightList, rightWrap, rIdx)}px)`;
 }
 
 /* ── PROGRESS INDICATOR ─────────────────────────────────────── */
@@ -354,18 +348,23 @@ function updateBottomNav() {
 }
 
 /* ── SCROLL HANDLER ─────────────────────────────────────────── */
+let rafPending = false;
 function onScroll() {
-  if (!state.scrollEnabled) return;
+  if (!state.scrollEnabled || rafPending) return;
+  rafPending = true;
+  requestAnimationFrame(() => {
+    rafPending = false;
 
-  const idx = getActiveIndex();
-  if (idx !== state.activeIndex) {
-    state.activeIndex = idx;
-    updateLists();
-  }
+    const idx = getActiveIndex();
+    if (idx !== state.activeIndex) {
+      state.activeIndex = idx;
+      updateLists();
+    }
 
-  updateParallax();
-  updateProgress();
-  updateBottomNav();
+    updateParallax();
+    updateProgress();
+    updateBottomNav();
+  });
 }
 
 /* ── PLAYGROUND ─────────────────────────────────────────────── */
