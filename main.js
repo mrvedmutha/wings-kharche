@@ -208,7 +208,8 @@ function runIntro() {
         : Math.round(THUMB_H * 2  / 3);
       return {
         dx: (r.left + w.offsetWidth  / 2) - cx,
-        dy: (r.top  + w.offsetHeight / 2) - cy,
+        // Offset by savedScroll so tiles target where images appear at the restored position
+        dy: (r.top  + w.offsetHeight / 2) - cy - savedScroll,
         sx: w.offsetWidth  / tw,
         sy: w.offsetHeight / THUMB_H,
       };
