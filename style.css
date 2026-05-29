@@ -165,7 +165,8 @@ body.intro-running { overflow: hidden; }
   width: var(--col-w);
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-end;
+  padding-bottom: 40px;
   z-index: 100;
   pointer-events: none;
   opacity: 0;
@@ -177,18 +178,14 @@ body.intro-running { overflow: hidden; }
 #left-list-wrap {
   position: relative;
   overflow: hidden;
-  height: 100vh;
   width: 100%;
 }
 
 #left-list {
-  position: absolute;
-  left: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 0;
-  will-change: transform;
 }
 
 #left-list li {
@@ -208,23 +205,19 @@ body.intro-running { overflow: hidden; }
 }
 
 #featured-label {
-  position: absolute;
-  left: 0;
-  bottom: calc(50% - 180px);
   font-family: var(--font-list);
   font-size: 12px;
   font-weight: 400;
   color: var(--c-featured);
+  margin-top: 16px;
 }
 
 #progress-pct {
-  position: absolute;
-  left: 0;
   font-family: var(--font-list);
   font-size: 12px;
   font-weight: 400;
   color: var(--c-muted);
-  bottom: calc(50% - 220px);
+  margin-top: 6px;
   transition: transform 0.4s ease;
 }
 
