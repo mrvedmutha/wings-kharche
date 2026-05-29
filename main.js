@@ -40,7 +40,8 @@ const state = {
 // Prevent browser from overriding our manual scroll restoration
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
-let savedScroll = 0;
+let savedScroll      = 0;
+let leftItemNaturalYs = []; // cached natural viewport-Y of each left li (fixed col, constant)
 
 /* ── DOM REFS ───────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
@@ -244,6 +245,7 @@ function runIntro() {
 
     state.scrollEnabled = true;
     state.activeIndex   = getActiveIndex();
+    cacheLeftItemYs();  // must happen before positionListType1 reads natural positions
     updateLists();
     updateParallax();
     updateProgress();
@@ -284,6 +286,33 @@ function getActiveIndex() {
   return best;
 }
 
+/* ── CONTINUOUS SCROLL FRACTION ────────────────────────────────*/
+function getScrollFracIdx() {
+  const wraps = [...imageTrack.querySelectorAll('.img-wrap')];
+  if (!wraps.length) return 0;
+  const mid = window.scrollY + window.innerHeight / 2;
+  const centers = wraps.map(w => {
+    const r = w.getBoundingClientRect();
+    return window.scrollY + r.top + r.height / 2;
+  });
+  if (mid <= centers[0]) return 0;
+  if (mid >= centers[centers.length - 1]) return centers.length - 1;
+  for (let i = 0; i < centers.length - 1; i++) {
+    if (mid >= centers[i] && mid < centers[i + 1]) {
+      return i + (mid - centers[i]) / (centers[i + 1] - centers[i]);
+    }
+  }
+  return 0;
+}
+
+/* ── CACHE LEFT ITEM NATURAL POSITIONS ──────────────────────── */
+function cacheLeftItemYs() {
+  // Reset any existing individual transforms so we read true natural positions
+  leftList.querySelectorAll('li').forEach(li => li.style.transform = '');
+  leftItemNaturalYs = [...leftList.querySelectorAll('li')]
+    .map(li => li.getBoundingClientRect().top);
+}
+
 /* ── PARALLAX ───────────────────────────────────────────────── */
 function updateParallax() {
   imageTrack.querySelectorAll('.img-wrap').forEach(wrap => {
@@ -302,24 +331,22 @@ function setParallax(px) {
 }
 
 /* ── SIDE LIST UPDATE ───────────────────────────────────────── */
-function updateLists() {
-  const idx = state.activeIndex;
-
-  // Update active class — left
+function updateActiveCls(idx) {
   leftList.querySelectorAll('li').forEach((li, i) => {
     li.classList.toggle('is-active', i === idx);
   });
-
-  // Update active class — right
   const activeCat = PROJECTS[idx].category;
   rightList.querySelectorAll('li').forEach(li => {
     li.classList.toggle('is-active', li.dataset.cat === activeCat);
   });
+}
 
+function updateLists() {
+  updateActiveCls(state.activeIndex);
   if (state.animType === 1) {
-    positionListType1(idx);
+    positionListType1();
   } else {
-    positionListType2(idx);
+    positionListType2(state.activeIndex);
   }
 }
 
@@ -336,9 +363,34 @@ function listTargetY(list, wrap, activeIdx) {
 
 const LIST_EASE = 'transform 0.5s cubic-bezier(0.25,0.46,0.45,0.94)';
 
-/* TYPE 1 — static for now; right list: color only, no movement */
-function positionListType1(idx) {
-  // animation TBD — list sits at bottom, only active class toggles color
+/* TYPE 1 — each item travels individually from bottom to its slot ─ */
+function positionListType1() {
+  if (!leftItemNaturalYs.length) return;
+  const rightItems = [...rightList.querySelectorAll('li')];
+  if (!rightItems.length) return;
+
+  // Anchor: first right-list item's current viewport Y
+  const anchorY = rightItems[0].getBoundingClientRect().top;
+  // Item height derived from cached natural positions (accurate line spacing)
+  const itemH = leftItemNaturalYs.length > 1
+    ? leftItemNaturalYs[1] - leftItemNaturalYs[0]
+    : 22;
+
+  const fracIdx = getScrollFracIdx();
+
+  leftList.querySelectorAll('li').forEach((li, i) => {
+    // Where this item should end up (parallel to right column row i)
+    const targetY  = anchorY + i * itemH;
+    const naturalY = leftItemNaturalYs[i];
+    const totalDY  = targetY - naturalY;
+
+    // progress: 0 = at bottom, 1 = fully parked at slot
+    // travels during the scroll span leading up to its image
+    const progress = Math.min(1, Math.max(0, fracIdx - i + 1));
+
+    li.style.transition = 'none';
+    li.style.transform  = `translateY(${totalDY * progress}px)`;
+  });
 }
 
 /* TYPE 2 — both lists slide; right list: color only, no movement */
@@ -374,13 +426,20 @@ function onScroll() {
   requestAnimationFrame(() => {
     rafPending = false;
 
-    // Persist scroll so reload can restore position
     sessionStorage.setItem('kh_scroll', String(window.scrollY));
 
-    const idx = getActiveIndex();
-    if (idx !== state.activeIndex) {
+    const idx      = getActiveIndex();
+    const changed  = idx !== state.activeIndex;
+    if (changed) {
       state.activeIndex = idx;
-      updateLists();
+      updateActiveCls(idx);
+    }
+
+    // Type 1: continuous per-frame movement; Type 2: only on index change
+    if (state.animType === 1) {
+      positionListType1();
+    } else if (changed) {
+      positionListType2(idx);
     }
 
     updateParallax();
@@ -407,9 +466,12 @@ pgPanel.querySelectorAll('.pg-btn[data-anim]').forEach(btn => {
     pgPanel.querySelectorAll('.pg-btn[data-anim]').forEach(b => b.classList.remove('is-active'));
     btn.classList.add('is-active');
     state.animType = parseInt(btn.dataset.anim);
-    // Reset list transitions and reposition
-    leftList.style.transition  = 'none';
-    rightList.style.transition = 'none';
+    // Reset both transform modes before switching
+    leftList.style.transform = '';
+    leftList.querySelectorAll('li').forEach(li => {
+      li.style.transition = 'none';
+      li.style.transform  = '';
+    });
     updateLists();
   });
 });

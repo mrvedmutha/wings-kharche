@@ -177,7 +177,7 @@ body.intro-running { overflow: hidden; }
 
 #left-list-wrap {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   width: 100%;
 }
 
