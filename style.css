@@ -69,7 +69,7 @@ body.intro-running { overflow: hidden; }
   position: absolute;
   overflow: hidden;
   border-radius: 3px;
-  transform-origin: top left;
+  transform-origin: center;
   will-change: transform, opacity;
 }
 

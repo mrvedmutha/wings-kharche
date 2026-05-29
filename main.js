@@ -187,12 +187,18 @@ function runIntro() {
     const tiles = [...introTiles.querySelectorAll('.intro-tile')];
 
     // READ all positions in one pass (avoids interleaved read/write reflows)
-    const targets = wraps.map(w => ({
-      dx:    w.getBoundingClientRect().left - tx,
-      dy:    w.getBoundingClientRect().top  - ty,
-      sx:    w.offsetWidth  / TW,
-      sy:    w.offsetHeight / TH,
-    }));
+    // Using center-to-center offsets because transform-origin is center
+    const tileCX = tx + TW / 2;
+    const tileCY = ty + TH / 2;
+    const targets = wraps.map(w => {
+      const r = w.getBoundingClientRect();
+      return {
+        dx: (r.left + w.offsetWidth  / 2) - tileCX,
+        dy: (r.top  + w.offsetHeight / 2) - tileCY,
+        sx: w.offsetWidth  / TW,
+        sy: w.offsetHeight / TH,
+      };
+    });
 
     // WRITE: animate with transform + opacity only (compositor-only, no layout)
     tiles.forEach((tile, i) => {
