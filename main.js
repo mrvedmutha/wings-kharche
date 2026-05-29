@@ -256,7 +256,6 @@ function runIntro() {
       topNav.classList.add('visible');
       leftCol.classList.add('visible');
       rightCol.classList.add('visible');
-      pgToggle.classList.add('visible');
     });
   }, cascadeDone + 100);
 
