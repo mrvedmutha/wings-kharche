@@ -369,28 +369,33 @@ function positionListType1() {
   const rightItems = [...rightList.querySelectorAll('li')];
   if (!rightItems.length) return;
 
-  // Anchor: first right-list item's current viewport Y
+  const n       = PROJECTS.length;
+  const fracIdx = getScrollFracIdx();
+  // Scale fracIdx [0, n-1] → normalized [0, n] so item 0 starts at 0
+  // and item n-1 (AMM School) fully parks at the last image center
+  const norm    = fracIdx * n / Math.max(n - 1, 1);
+
   const anchorY = rightItems[0].getBoundingClientRect().top;
-  // Item height derived from cached natural positions (accurate line spacing)
-  const itemH = leftItemNaturalYs.length > 1
+  const itemH   = leftItemNaturalYs.length > 1
     ? leftItemNaturalYs[1] - leftItemNaturalYs[0]
     : 22;
 
-  const fracIdx = getScrollFracIdx();
-
   leftList.querySelectorAll('li').forEach((li, i) => {
-    // Where this item should end up (parallel to right column row i)
     const targetY  = anchorY + i * itemH;
     const naturalY = leftItemNaturalYs[i];
     const totalDY  = targetY - naturalY;
-
-    // progress: 0 = at bottom, 1 = fully parked at slot
-    // item i travels during fracIdx [i, i+1] — starts moving as image i centers
-    const progress = Math.min(1, Math.max(0, fracIdx - i));
-
+    // progress 0→1 as norm goes from i→i+1; stays 1 once parked
+    const progress = Math.min(1, Math.max(0, norm - i));
     li.style.transition = 'none';
     li.style.transform  = `translateY(${totalDY * progress}px)`;
   });
+
+  // Active = the item currently traveling (stays active until fully rested)
+  const activeIdx = Math.min(Math.max(Math.floor(norm), 0), n - 1);
+  if (activeIdx !== state.activeIndex) {
+    state.activeIndex = activeIdx;
+    updateActiveCls(activeIdx);
+  }
 }
 
 /* TYPE 2 — both lists slide; right list: color only, no movement */
@@ -428,18 +433,18 @@ function onScroll() {
 
     sessionStorage.setItem('kh_scroll', String(window.scrollY));
 
-    const idx      = getActiveIndex();
-    const changed  = idx !== state.activeIndex;
-    if (changed) {
-      state.activeIndex = idx;
-      updateActiveCls(idx);
-    }
-
-    // Type 1: continuous per-frame movement; Type 2: only on index change
     if (state.animType === 1) {
+      // Type 1: runs every frame; active class managed inside positionListType1
       positionListType1();
-    } else if (changed) {
-      positionListType2(idx);
+    } else {
+      // Type 2: only reposition when active image changes
+      const idx     = getActiveIndex();
+      const changed = idx !== state.activeIndex;
+      if (changed) {
+        state.activeIndex = idx;
+        updateActiveCls(idx);
+        positionListType2(idx);
+      }
     }
 
     updateParallax();
