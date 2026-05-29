@@ -99,85 +99,138 @@ function runIntro() {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
-  // Phase 1: icon fades in
+  // Thumbnail stack size & position (centred on screen)
+  const TW = 300;
+  const TH = 190;
+  const tx = vw / 2 - TW / 2;
+  const ty = vh / 2 - TH / 2;
+
+  // Phase 1 — logo scales in
   setTimeout(() => {
-    introIcon.style.transition = 'transform 0.5s cubic-bezier(0.34,1.56,0.64,1), opacity 0.4s ease';
-    introIcon.style.opacity = '1';
-    introIcon.style.transform = 'translate(-50%, -50%) scale(1)';
-  }, 200);
+    introIcon.style.transition = 'opacity 0.35s ease, transform 0.45s cubic-bezier(0.34,1.56,0.64,1)';
+    introIcon.style.opacity    = '1';
+    introIcon.style.transform  = 'translate(-50%,-50%) scale(1) rotate(0deg)';
+  }, 150);
 
-  // Phase 2: image tiles pop in one by one
-  const tileW = 180;
-  const tileH = 130;
-  const cols  = 4;
-  const startX = vw / 2 - (cols * tileW) / 2;
+  // Phase 2 — logo rotates 360°
+  setTimeout(() => {
+    introIcon.style.transition = 'transform 0.65s cubic-bezier(0.4,0,0.2,1)';
+    introIcon.style.transform  = 'translate(-50%,-50%) scale(1) rotate(360deg)';
+  }, 480);
 
-  PROJECTS.slice(0, 12).forEach((p, i) => {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const tx  = startX + col * (tileW + 10);
-    const ty  = vh / 2 - 200 + row * (tileH + 10);
+  // Phase 3 — images pop in one by one at the SAME centre position
+  //           75% opacity, each scales 0→1, staggered
+  const STAGGER   = 85;
+  const POP_START = 900;
 
+  PROJECTS.forEach((p, i) => {
     const tile = document.createElement('div');
     tile.className = 'intro-tile';
-    tile.style.cssText = `
-      left: ${tx}px;
-      top:  ${ty}px;
-      width:  ${tileW}px;
-      height: ${tileH}px;
-    `;
+    Object.assign(tile.style, {
+      left:      `${tx}px`,
+      top:       `${ty}px`,
+      width:     `${TW}px`,
+      height:    `${TH}px`,
+      opacity:   '0.75',
+      transform: 'scale(0)',
+      zIndex:    String(i + 1),
+    });
 
     const img = document.createElement('img');
-    img.src = `assets/${p.img}`;
-    img.alt = '';
+    img.src  = `assets/${p.img}`;
+    img.alt  = '';
     tile.appendChild(img);
     introTiles.appendChild(tile);
 
-    const delay = 400 + i * 90;
     setTimeout(() => {
-      tile.style.transition = 'transform 0.45s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease';
-      tile.style.opacity = '1';
-      tile.style.transform = 'scale(1)';
-    }, delay);
+      tile.style.transition = 'transform 0.36s cubic-bezier(0.34,1.1,0.64,1)';
+      tile.style.transform  = 'scale(1)';
+    }, POP_START + i * STAGGER);
   });
 
-  // Phase 3: collapse tiles to vertical strip, bg fades to white
+  // All images settled
+  const allDone = POP_START + PROJECTS.length * STAGGER + 400;
+
+  // Phase 4 — logo fades, thin line grows from centre of stack
+  let   introLine;
   setTimeout(() => {
-    introEl.style.transition = 'background 0.8s ease';
-    introEl.style.background = 'rgba(255,255,255,0.9)';
-    introIcon.style.opacity = '0';
+    introIcon.style.transition = 'opacity 0.25s ease';
+    introIcon.style.opacity    = '0';
 
-    document.querySelectorAll('.intro-tile').forEach((tile, i) => {
-      const w = imageTrack.offsetWidth || 940;
-      const cx = vw / 2 - w / 2 + 10;
-      const oh = parseInt(tile.style.height);
-      const targetTop = vh / 2 - oh / 2 + (i - 6) * (oh + 12);
-
-      tile.style.transition = 'left 0.6s ease, top 0.6s ease, width 0.6s ease, opacity 0.5s ease';
-      tile.style.left  = `${cx}px`;
-      tile.style.top   = `${targetTop}px`;
-      tile.style.width = `${w - 20}px`;
+    introLine = document.createElement('div');
+    Object.assign(introLine.style, {
+      position:   'absolute',
+      left:       `${vw / 2}px`,
+      top:        `${vh / 2}px`,
+      width:      '0px',
+      height:     '1.5px',
+      background: '#000',
+      transform:  'translate(-50%, -50%)',
+      zIndex:     '200',
+      transition: 'width 0.45s cubic-bezier(0.4,0,0.2,1)',
     });
-  }, 1700);
+    introEl.appendChild(introLine);
 
-  // Phase 4: reveal main layout
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { introLine.style.width = `${TW}px`; });
+    });
+  }, allDone + 100);
+
+  // Phase 5 — images cascade DOWN + scale up, line fades
+  //           each tile animates to its actual track-image size & position
   setTimeout(() => {
-    introEl.style.transition = 'opacity 0.7s ease';
-    introEl.style.opacity = '0';
+    if (introLine) {
+      introLine.style.transition = 'opacity 0.3s ease';
+      introLine.style.opacity    = '0';
+    }
+
+    const wraps = [...imageTrack.querySelectorAll('.img-wrap')];
+    const tiles = [...introTiles.querySelectorAll('.intro-tile')];
+
+    tiles.forEach((tile, i) => {
+      const wrap = wraps[i];
+      if (!wrap) return;
+
+      const fullW  = wrap.offsetWidth;
+      const fullH  = wrap.offsetHeight;
+      // getBoundingClientRect at scrollY=0 gives screen position
+      const wRect  = wrap.getBoundingClientRect();
+      const destX  = wRect.left;
+      const destY  = wRect.top;
+
+      const delay = i * 30;
+      tile.style.transition = `left 0.65s cubic-bezier(0.4,0,0.2,1) ${delay}ms,
+                               top  0.65s cubic-bezier(0.4,0,0.2,1) ${delay}ms,
+                               width  0.65s ease ${delay}ms,
+                               height 0.65s ease ${delay}ms,
+                               opacity 0.4s ease ${delay}ms`;
+      tile.style.left    = `${destX}px`;
+      tile.style.top     = `${destY}px`;
+      tile.style.width   = `${fullW}px`;
+      tile.style.height  = `${fullH}px`;
+      tile.style.opacity = '1';
+    });
+  }, allDone + 580);
+
+  // Phase 6 — overlay fades, layout revealed (while tiles are still animating)
+  setTimeout(() => {
+    introEl.style.transition = 'opacity 0.55s ease';
+    introEl.style.opacity    = '0';
     topNav.classList.add('visible');
     leftCol.classList.add('visible');
     rightCol.classList.add('visible');
     pgToggle.classList.add('visible');
-  }, 2600);
+  }, allDone + 900);
 
-  // Phase 5: complete
+  // Phase 7 — cleanup + enable scroll
   setTimeout(() => {
     introEl.style.display = 'none';
     document.body.classList.remove('intro-running');
+    window.scrollTo(0, 0);
     state.scrollEnabled = true;
     state.introComplete = true;
     updateLists();
-  }, 3300);
+  }, allDone + 1500);
 }
 
 /* ── ACTIVE INDEX DETECTION ─────────────────────────────────── */
