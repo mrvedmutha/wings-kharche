@@ -175,10 +175,21 @@ body.intro-running { overflow: hidden; }
 
 #left-col.visible { opacity: 1; }
 
-/* Type 2 — centre list vertically so mid-item sits at viewport centre */
+/* Type 2 — centre col, clip list to ~7 items so wrap snaps stay off-screen */
 body.anim-type-2 #left-col {
   justify-content: center;
   padding-bottom: 0;
+}
+
+body.anim-type-2 #left-list-wrap {
+  overflow: hidden;
+  /* 7 items × (12px font × 1.9 line-height) ≈ 160px
+     wrap snap happens at ±n/2 items ≈ ±187px — always outside this clip */
+  height: 160px;
+}
+
+body.anim-type-2 #featured-label {
+  display: none;
 }
 
 #left-list-wrap {

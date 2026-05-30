@@ -442,16 +442,35 @@ function positionListType1() {
   }
 }
 
-/* TYPE 2 — no movement at all; only active highlight switches ── */
+/* TYPE 2 — loop wrap using INTEGER active index; no fractional drift ── */
 function positionListType2() {
+  if (!leftItemNaturalYs.length) return;
+
   const n         = PROJECTS.length;
   const fracIdx   = getScrollFracIdx();
+  // Integer only — items reposition once per active change, not every frame
   const activeIdx = ((Math.round(fracIdx) % n) + n) % n;
 
   if (activeIdx !== state.activeIndex) {
     state.activeIndex = activeIdx;
     updateActiveCls(activeIdx);
   }
+
+  const itemH   = leftItemNaturalYs.length > 1
+    ? leftItemNaturalYs[1] - leftItemNaturalYs[0]
+    : 22;
+  const centerY = window.innerHeight / 2;
+
+  leftList.style.transform = '';
+  leftList.querySelectorAll('li').forEach((li, i) => {
+    let diff = i - activeIdx;            // integer diff → no fractional drift
+    diff -= Math.round(diff / n) * n;   // wrap to shortest path ±n/2
+
+    const targetY  = centerY + diff * itemH;
+    const naturalY = leftItemNaturalYs[i];
+    li.style.transition = 'none';
+    li.style.transform  = `translateY(${targetY - naturalY}px)`;
+  });
 }
 
 /* ── PROGRESS INDICATOR ─────────────────────────────────────── */
