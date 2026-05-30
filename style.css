@@ -195,7 +195,8 @@ body.intro-running { overflow: hidden; }
   color: var(--c-muted);
   line-height: 1.9;
   white-space: nowrap;
-  cursor: default;
+  cursor: pointer;
+  pointer-events: auto;
   transition: color 0.35s ease, font-weight 0.35s ease;
 }
 
@@ -213,11 +214,14 @@ body.intro-running { overflow: hidden; }
 }
 
 #progress-pct {
+  position: absolute;
+  bottom: 40px;
+  left: 0;
   font-family: var(--font-list);
   font-size: 12px;
   font-weight: 400;
   color: var(--c-muted);
-  margin-top: 6px;
+  white-space: nowrap;
   transition: transform 0.4s ease;
 }
 
@@ -289,7 +293,7 @@ body.intro-running { overflow: hidden; }
   flex-direction: column;
   align-items: center;
   gap: var(--img-gap);
-  padding: 50vh 0;
+  padding: calc(50vh - var(--ls-h) / 2) 0 calc(50vh - var(--ls-h) / 2);
   width: 100%;
   max-width: var(--ls-w);
 }
@@ -322,6 +326,27 @@ body.intro-running { overflow: hidden; }
   object-fit: cover;
   display: block;
   will-change: transform;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.img-wrap img.is-loaded {
+  opacity: 1;
+}
+
+/* Anchor wrapper — invisible to flex layout */
+.img-link {
+  display: contents;
+  text-decoration: none;
+}
+
+.img-link .img-wrap {
+  cursor: pointer;
+}
+
+/* Prevent image clicks during intro animation */
+body.intro-running #image-track {
   pointer-events: none;
 }
 
@@ -538,7 +563,8 @@ body.zindex-on .img-wrap.portrait  { z-index: 1; }
   background: rgba(0,0,0,0.08);
 }
 
-#gap-slider {
+#gap-slider,
+#speed-slider {
   width: 100%;
   -webkit-appearance: none;
   appearance: none;
@@ -549,7 +575,8 @@ body.zindex-on .img-wrap.portrait  { z-index: 1; }
   cursor: pointer;
 }
 
-#gap-slider::-webkit-slider-thumb {
+#gap-slider::-webkit-slider-thumb,
+#speed-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 14px;
@@ -559,7 +586,8 @@ body.zindex-on .img-wrap.portrait  { z-index: 1; }
   cursor: pointer;
 }
 
-#gap-slider::-moz-range-thumb {
+#gap-slider::-moz-range-thumb,
+#speed-slider::-moz-range-thumb {
   width: 14px;
   height: 14px;
   background: #000;

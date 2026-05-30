@@ -28,13 +28,16 @@ const CATEGORIES = [...new Set(PROJECTS.map(p => p.category))];
 
 /* ── STATE ─────────────────────────────────────────────────── */
 const state = {
-  activeIndex:   0,
-  animType:      1,       // 1 or 2
-  gap:           24,
-  parallax:      100,
-  zindex:        true,
-  scrollEnabled: false,
-  introComplete: false,
+  activeIndex:     0,
+  animType:        1,       // 1 or 2
+  gap:             24,
+  parallax:        100,
+  zindex:          true,
+  scrollEnabled:   false,
+  introComplete:   false,
+  autoScroll:      false,
+  autoScrollSpeed: 1,
+  loop:            false,
 };
 
 // Prevent browser from overriding our manual scroll restoration
@@ -66,11 +69,22 @@ const sizeSlider     = $('size-slider');
 const sizeVal        = $('size-val');
 const parallaxSlider = $('parallax-slider');
 const parallaxVal    = $('parallax-val');
-const zindexCb       = $('zindex-cb');
-const zindexLbl      = $('zindex-lbl');
+const zindexCb          = $('zindex-cb');
+const zindexLbl         = $('zindex-lbl');
+const autoscrollCb      = $('autoscroll-cb');
+const autoscrollLbl     = $('autoscroll-lbl');
+const speedSlider       = $('speed-slider');
+const speedVal          = $('speed-val');
+const loopCb            = $('loop-cb');
+const loopLbl           = $('loop-lbl');
 
 // Base image dimensions (100% scale)
 const BASE = { lsW: 940, lsH: 530, ptW: 640, ptH: 860, parallax: 100 };
+
+/* ── HELPERS ────────────────────────────────────────────────── */
+function slugify(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
 
 /* ── BUILD SIDE LISTS ───────────────────────────────────────── */
 function buildLists() {
@@ -79,6 +93,13 @@ function buildLists() {
     li.textContent = p.name;
     li.dataset.idx = i;
     if (i === 0) li.classList.add('is-active');
+    li.addEventListener('click', () => {
+      const wrap = imageTrack.querySelector(`.img-wrap[data-idx="${i}"]`);
+      if (!wrap) return;
+      const rect   = wrap.getBoundingClientRect();
+      const target = window.scrollY + rect.top + rect.height / 2 - window.innerHeight / 2;
+      window.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+    });
     leftList.appendChild(li);
   });
 
@@ -99,13 +120,47 @@ function buildTrack() {
     wrap.dataset.idx = i;
 
     const img = document.createElement('img');
-    img.src = `assets/${p.img}`;
     img.alt = p.name;
-    img.loading = i < 3 ? 'eager' : 'lazy';
+
+    const onLoaded = () => img.classList.add('is-loaded');
+
+    if (i < 6) {
+      img.src     = `assets/${p.img}`;
+      img.loading = 'eager';
+      if (i === 0) img.fetchPriority = 'high';
+      img.addEventListener('load', onLoaded, { once: true });
+      if (img.complete && img.naturalHeight > 0) onLoaded();
+    } else {
+      img.dataset.src = `assets/${p.img}`;
+      img.addEventListener('load', onLoaded, { once: true });
+    }
 
     wrap.appendChild(img);
-    imageTrack.appendChild(wrap);
+
+    const link = document.createElement('a');
+    link.href      = `/project/${slugify(p.name)}`;
+    link.className = 'img-link';
+    link.appendChild(wrap);
+    imageTrack.appendChild(link);
   });
+}
+
+/* ── LAZY LOAD — IntersectionObserver, 800px ahead ─────────── */
+function setupLazyLoad() {
+  const lazyImgs = [...imageTrack.querySelectorAll('img[data-src]')];
+  if (!lazyImgs.length) return;
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const img   = entry.target;
+      img.src     = img.dataset.src;
+      delete img.dataset.src;
+      observer.unobserve(img);
+    });
+  }, { rootMargin: '800px 0px' });
+
+  lazyImgs.forEach(img => observer.observe(img));
 }
 
 /* ── INTRO ANIMATION ────────────────────────────────────────── */
@@ -418,12 +473,14 @@ function positionListType2() {
 
 /* ── PROGRESS INDICATOR ─────────────────────────────────────── */
 function updateProgress() {
-  const docH   = document.documentElement.scrollHeight - window.innerHeight;
-  const pct    = docH > 0 ? Math.round((window.scrollY / docH) * 100) : 0;
-  const rangeW = 100; // px of horizontal drift
+  const docH  = document.documentElement.scrollHeight - window.innerHeight;
+  const pct   = docH > 0 ? Math.round((window.scrollY / docH) * 100) : 0;
+  // Travel left→right across the right column (col width ≈ 150px usable)
+  const colW  = rightCol.offsetWidth;
+  const rangeW = Math.max(colW - 20, 0);
 
-  progressEl.textContent = `${pct}%`;
-  progressEl.style.transform = `translateX(${(pct / 100) * rangeW}px)`;
+  progressEl.textContent      = `${pct}%`;
+  progressEl.style.transform  = `translateX(${(pct / 100) * rangeW}px)`;
 }
 
 /* ── BOTTOM NAV ─────────────────────────────────────────────── */
@@ -518,6 +575,24 @@ zindexCb.addEventListener('change', () => {
   zindexLbl.textContent = state.zindex ? 'On' : 'Off';
 });
 
+// Auto scroll toggle (logic wired in next session)
+autoscrollCb.addEventListener('change', () => {
+  state.autoScroll       = autoscrollCb.checked;
+  autoscrollLbl.textContent = state.autoScroll ? 'On' : 'Off';
+});
+
+// Auto scroll speed
+speedSlider.addEventListener('input', () => {
+  state.autoScrollSpeed  = parseInt(speedSlider.value);
+  speedVal.textContent   = `${state.autoScrollSpeed}×`;
+});
+
+// Seamless loop toggle (logic wired in next session)
+loopCb.addEventListener('change', () => {
+  state.loop       = loopCb.checked;
+  loopLbl.textContent = state.loop ? 'On' : 'Off';
+});
+
 /* ── INIT ───────────────────────────────────────────────────── */
 function init() {
   // Read scroll position saved before the last reload
@@ -525,6 +600,7 @@ function init() {
 
   buildLists();
   buildTrack();
+  setupLazyLoad();
 
   // Apply initial body class for z-index
   document.body.classList.add('zindex-on');
