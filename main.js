@@ -362,7 +362,8 @@ function getScrollFracIdx() {
 
 /* ── CACHE LEFT ITEM NATURAL POSITIONS ──────────────────────── */
 function cacheLeftItemYs() {
-  // Reset any existing individual transforms so we read true natural positions
+  // Clear container transform AND per-item transforms before measuring
+  leftList.style.transform = '';
   leftList.querySelectorAll('li').forEach(li => li.style.transform = '');
   leftItemNaturalYs = [...leftList.querySelectorAll('li')]
     .map(li => li.getBoundingClientRect().top);
@@ -441,34 +442,31 @@ function positionListType1() {
   }
 }
 
-/* TYPE 2 — infinite wrap, active item always at viewport center ── */
+/* TYPE 2 — whole list snaps so active item sits at center; no per-item movement */
 function positionListType2() {
   if (!leftItemNaturalYs.length) return;
 
-  const n       = PROJECTS.length;
-  const fracIdx = getScrollFracIdx();
-  const itemH   = leftItemNaturalYs.length > 1
-    ? leftItemNaturalYs[1] - leftItemNaturalYs[0]
-    : 22;
-  const centerY = window.innerHeight / 2;
+  const n         = PROJECTS.length;
+  const fracIdx   = getScrollFracIdx();
+  // Integer active index only — no fractional interpolation → no continuous movement
+  const activeIdx = Math.min(Math.max(Math.round(fracIdx), 0), n - 1);
 
-  leftList.querySelectorAll('li').forEach((li, i) => {
-    let diff = i - fracIdx;
-    // Wrap to shortest path: normalise to (-n/2, n/2]
-    diff -= Math.round(diff / n) * n;
-
-    const targetY  = centerY + diff * itemH;
-    const naturalY = leftItemNaturalYs[i];
-    li.style.transition = 'none';
-    li.style.transform  = `translateY(${targetY - naturalY}px)`;
-  });
-
-  // Active = item closest to center (round fracIdx, keep in bounds)
-  const activeIdx = ((Math.round(fracIdx) % n) + n) % n;
   if (activeIdx !== state.activeIndex) {
     state.activeIndex = activeIdx;
     updateActiveCls(activeIdx);
   }
+
+  const itemH   = leftItemNaturalYs.length > 1
+    ? leftItemNaturalYs[1] - leftItemNaturalYs[0]
+    : 22;
+  const centerY = window.innerHeight / 2;
+  const natY    = leftItemNaturalYs[activeIdx];
+
+  // Move the whole list container so the active item is at viewport center.
+  // No per-item transforms — items never move relative to each other.
+  leftList.querySelectorAll('li').forEach(li => { li.style.transform = ''; });
+  leftList.style.transition = 'none';
+  leftList.style.transform  = `translateY(${centerY - (natY + itemH / 2)}px)`;
 }
 
 /* ── PROGRESS INDICATOR ─────────────────────────────────────── */
