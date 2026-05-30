@@ -449,7 +449,7 @@ function positionListType2() {
   const n         = PROJECTS.length;
   const fracIdx   = getScrollFracIdx();
   // Integer active index only — no fractional interpolation → no continuous movement
-  const activeIdx = Math.min(Math.max(Math.round(fracIdx), 0), n - 1);
+  const activeIdx = ((Math.round(fracIdx) % n) + n) % n;
 
   if (activeIdx !== state.activeIndex) {
     state.activeIndex = activeIdx;
