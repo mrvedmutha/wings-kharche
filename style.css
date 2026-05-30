@@ -68,7 +68,6 @@ body.intro-running { overflow: hidden; }
 .intro-tile {
   position: absolute;
   overflow: hidden;
-  border-radius: 3px;
   transform-origin: center;
   will-change: transform, opacity;
 }

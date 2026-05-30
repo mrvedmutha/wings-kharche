@@ -167,14 +167,25 @@ function setupLazyLoad() {
 function runIntro() {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-
-  // Thumbnail height is fixed; width follows each image's aspect ratio
-  const THUMB_H = 180;
-  const tileW   = p => p.orient === 'landscape'
-    ? Math.round(THUMB_H * 16 / 9)   // ~320px
-    : Math.round(THUMB_H * 2  / 3);  // ~120px
   const cx = vw / 2;
   const cy = vh / 2;
+
+  // Always start centred on project index 3 ("line 4") — gives scroll room
+  // above for seamless loop logic later
+  const INTRO_START_IDX = 3;
+  {
+    const wraps = [...imageTrack.querySelectorAll('.img-wrap')];
+    const w     = wraps[INTRO_START_IDX];
+    if (w) {
+      const r     = w.getBoundingClientRect(); // scrollY=0 during intro-running
+      savedScroll = Math.max(0, Math.round(r.top + w.offsetHeight / 2 - cy));
+    }
+  }
+
+  const THUMB_H = 180;
+  const tileW   = p => p.orient === 'landscape'
+    ? Math.round(THUMB_H * 16 / 9)
+    : Math.round(THUMB_H * 2  / 3);
 
   // Phase 1 — logo scales in
   setTimeout(() => {
@@ -190,7 +201,6 @@ function runIntro() {
   }, 480);
 
   // Phase 3 — images pop in one by one at the SAME centre position
-  //           75% opacity, each scales 0→1, staggered
   const STAGGER   = 85;
   const POP_START = 900;
 
@@ -220,7 +230,6 @@ function runIntro() {
     }, POP_START + i * STAGGER);
   });
 
-  // All images settled
   const allDone = POP_START + PROJECTS.length * STAGGER + 400;
 
   // Phase 4 — logo fades
@@ -229,25 +238,29 @@ function runIntro() {
     introIcon.style.opacity    = '0';
   }, allDone + 100);
 
-  // Phase 5 — tiles arrange into a vertical strip (still thumbnail scale)
-  //           transform only — center-to-center, uniform scale so no layout cost
+  // Phase 5 — tiles fan into a vertical strip (thumbnail scale)
+  // Store per-tile dy, uniform scale, and computed slide amount for Phase 6
+  const stripDy = new Array(PROJECTS.length).fill(0);
+  let   stripS  = 1;
+  let   slideAmt = 0;
+
   setTimeout(() => {
     const tiles = [...introTiles.querySelectorAll('.intro-tile')];
     const n     = tiles.length;
-
-    // Scale tiles down to fit all of them in the viewport height
-    const GAP     = 5;
-    // Uniform scale so the strip fits in the viewport
-    const s       = Math.min(1, (vh * 0.85 - (n - 1) * GAP) / (n * THUMB_H));
-    const scaledH = THUMB_H * s;
-    const totalH  = n * scaledH + (n - 1) * GAP;
+    const GAP   = 5;
+    const s     = Math.min(1, (vh * 0.85 - (n - 1) * GAP) / (n * THUMB_H));
+    const scaledH  = THUMB_H * s;
+    const totalH   = n * scaledH + (n - 1) * GAP;
     const stripTop = (vh - totalH) / 2;
+
+    stripS = s;
+    // Slide until tile 8's top hits the viewport bottom — leaves tiles 0–7 visible
+    slideAmt = vh - stripTop - 8 * (scaledH + GAP);
 
     tiles.forEach((tile, i) => {
       const centerY = stripTop + i * (scaledH + GAP) + scaledH / 2;
-      const dy      = centerY - cy;   // offset from stack centre (cy)
-      // dx = 0: tiles stay horizontally centred
-      // landscape tiles (wider) and portrait tiles (narrower) remain distinct
+      const dy      = centerY - cy;
+      stripDy[i]    = dy;
 
       const delay = i * 32;
       tile.style.transition = `transform 0.55s cubic-bezier(0.25,0.46,0.45,0.94) ${delay}ms, opacity 0.4s ease ${delay}ms`;
@@ -256,13 +269,23 @@ function runIntro() {
     });
   }, allDone + 380);
 
-  // When last strip tile finishes settling
   const stripDone = allDone + 380 + 550 + (PROJECTS.length - 1) * 32;
 
-  // Phase 6 — strip slides down, each tile scales up to its actual track position
+  // Phase 6 — strip slides DOWN, 4 thumbnails remain visible at the bottom
   setTimeout(() => {
-    const wraps = [...imageTrack.querySelectorAll('.img-wrap')];
     const tiles = [...introTiles.querySelectorAll('.intro-tile')];
+    tiles.forEach((tile, i) => {
+      tile.style.transition = 'transform 0.65s cubic-bezier(0.25,0.46,0.45,0.94)';
+      tile.style.transform  = `translate(0px, ${stripDy[i] + slideAmt}px) scale(${stripS})`;
+    });
+  }, stripDone + 300);
+
+  const slideDownDone = stripDone + 300 + 550;
+
+  // Phase 7 — sweep UP + grow into full track, centred on project INTRO_START_IDX
+  setTimeout(() => {
+    const wraps   = [...imageTrack.querySelectorAll('.img-wrap')];
+    const tiles   = [...introTiles.querySelectorAll('.intro-tile')];
 
     // Batch-read all track positions before any writes
     const targets = PROJECTS.map((p, i) => {
@@ -273,54 +296,45 @@ function runIntro() {
         : Math.round(THUMB_H * 2  / 3);
       return {
         dx: (r.left + w.offsetWidth  / 2) - cx,
-        // Offset by savedScroll so tiles target where images appear at the restored position
         dy: (r.top  + w.offsetHeight / 2) - cy - savedScroll,
         sx: w.offsetWidth  / tw,
         sy: w.offsetHeight / THUMB_H,
       };
     });
 
-    // Write: translate to track centre + scale to full size
     tiles.forEach((tile, i) => {
-      const t = targets[i];
+      const t     = targets[i];
       if (!t) return;
-      const delay = i * 22;
-      tile.style.transition = `transform 0.75s cubic-bezier(0.4,0,0.2,1) ${delay}ms`;
+      const delay = i * 18;
+      tile.style.transition = `transform 0.8s cubic-bezier(0.25,0.46,0.45,0.94) ${delay}ms`;
       tile.style.transform  = `translate(${t.dx}px, ${t.dy}px) scale(${t.sx}, ${t.sy})`;
     });
-  }, stripDone + 250);
+  }, slideDownDone + 150);
 
-  // Phase 7 — overlay fades, scroll position restored, layout revealed
-  const cascadeDone = stripDone + 250 + 750 + (PROJECTS.length - 1) * 22;
+  const cascadeDone = slideDownDone + 150 + 800 + (PROJECTS.length - 1) * 18;
 
+  // Phase 8 — scroll restored, overlay removed instantly (seamless cut)
   setTimeout(() => {
-    // Step 1: remove scroll lock + restore position while overlay is still FULLY opaque
     document.body.classList.remove('intro-running');
     window.scrollTo({ top: savedScroll, behavior: 'instant' });
 
     state.scrollEnabled = true;
     state.activeIndex   = getActiveIndex();
-    cacheLeftItemYs();  // must happen before positionListType1 reads natural positions
+    cacheLeftItemYs();
     updateLists();
     updateParallax();
     updateProgress();
     updateBottomNav();
 
-    // Step 2: one frame later — scroll is committed, NOW start the fade
+    // One frame for scroll to commit, then cut overlay instantly
     requestAnimationFrame(() => {
-      introEl.style.transition = 'opacity 0.55s ease';
-      introEl.style.opacity    = '0';
+      introEl.style.display = 'none';
+      state.introComplete   = true;
       topNav.classList.add('visible');
       leftCol.classList.add('visible');
       rightCol.classList.add('visible');
     });
   }, cascadeDone + 100);
-
-  // Phase 8 — remove overlay element
-  setTimeout(() => {
-    introEl.style.display = 'none';
-    state.introComplete   = true;
-  }, cascadeDone + 700);
 }
 
 /* ── ACTIVE INDEX DETECTION ─────────────────────────────────── */
@@ -599,9 +613,6 @@ loopCb.addEventListener('change', () => {
 
 /* ── INIT ───────────────────────────────────────────────────── */
 function init() {
-  // Read scroll position saved before the last reload
-  savedScroll = parseInt(sessionStorage.getItem('kh_scroll') || '0', 10);
-
   buildLists();
   buildTrack();
   setupLazyLoad();
