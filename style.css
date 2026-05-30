@@ -354,9 +354,6 @@ body.intro-running #image-track {
   pointer-events: none;
 }
 
-/* Z-index layering — landscape in front */
-body.zindex-on .img-wrap.landscape { z-index: 2; }
-body.zindex-on .img-wrap.portrait  { z-index: 1; }
 
 /* ── FOOTER ─────────────────────────────────────────────────── */
 #site-footer {
@@ -567,8 +564,7 @@ body.zindex-on .img-wrap.portrait  { z-index: 1; }
   background: rgba(0,0,0,0.08);
 }
 
-#gap-slider,
-#speed-slider {
+#gap-slider {
   width: 100%;
   -webkit-appearance: none;
   appearance: none;
@@ -579,8 +575,7 @@ body.zindex-on .img-wrap.portrait  { z-index: 1; }
   cursor: pointer;
 }
 
-#gap-slider::-webkit-slider-thumb,
-#speed-slider::-webkit-slider-thumb {
+#gap-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 14px;
@@ -590,8 +585,7 @@ body.zindex-on .img-wrap.portrait  { z-index: 1; }
   cursor: pointer;
 }
 
-#gap-slider::-moz-range-thumb,
-#speed-slider::-moz-range-thumb {
+#gap-slider::-moz-range-thumb {
   width: 14px;
   height: 14px;
   background: #000;
