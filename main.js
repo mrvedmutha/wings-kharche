@@ -441,30 +441,12 @@ function positionListType1() {
   }
 }
 
-/* TYPE 2 — infinite wrap, active item always at viewport center ── */
+/* TYPE 2 — no item movement, only active highlight switches ──── */
 function positionListType2() {
-  if (!leftItemNaturalYs.length) return;
+  const n         = PROJECTS.length;
+  const fracIdx   = getScrollFracIdx();
+  const activeIdx = Math.min(Math.round(fracIdx), n - 1);
 
-  const n       = PROJECTS.length;
-  const fracIdx = getScrollFracIdx();
-  const itemH   = leftItemNaturalYs.length > 1
-    ? leftItemNaturalYs[1] - leftItemNaturalYs[0]
-    : 22;
-  const centerY = window.innerHeight / 2;
-
-  leftList.querySelectorAll('li').forEach((li, i) => {
-    let diff = i - fracIdx;
-    // Wrap to shortest path: normalise to (-n/2, n/2]
-    diff -= Math.round(diff / n) * n;
-
-    const targetY  = centerY + diff * itemH;
-    const naturalY = leftItemNaturalYs[i];
-    li.style.transition = 'none';
-    li.style.transform  = `translateY(${targetY - naturalY}px)`;
-  });
-
-  // Active = item closest to center (round fracIdx, keep in bounds)
-  const activeIdx = ((Math.round(fracIdx) % n) + n) % n;
   if (activeIdx !== state.activeIndex) {
     state.activeIndex = activeIdx;
     updateActiveCls(activeIdx);
