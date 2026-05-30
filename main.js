@@ -133,9 +133,10 @@ let imageWraps = []; // .img-wrap elements
 let imageEls = []; // inner <img> elements
 let imageCenters = []; // absolute document-Y of each img-wrap centre
 let imageSizes = []; // rendered height of each img-wrap
-let rightAnchorY = 0; // viewport-Y of first right-list item (fixed col)
-let rightColW = 0; // width of right column
-let totalScrollH = 0; // scrollHeight - innerHeight, cached
+let rightAnchorY   = 0; // viewport-Y of first right-list item (fixed col)
+let rightColW      = 0; // width of right column
+let totalScrollH   = 0; // scrollHeight - innerHeight, cached
+let progressRangeW = 0; // travel distance: left-col left edge → right-col right edge
 let leftItems = []; // left list <li> refs
 let rightItems = []; // right list <li> refs
 
@@ -482,9 +483,13 @@ function cacheLayout() {
   imageSizes = rects.map((r) => r.height);
 
   // ── Right column measurements (fixed, constant after layout)
-  rightAnchorY = rightItems[0] ? rightItems[0].getBoundingClientRect().top : 0;
-  rightColW = rightCol.offsetWidth;
-  totalScrollH = document.documentElement.scrollHeight - window.innerHeight;
+  rightAnchorY   = rightItems[0] ? rightItems[0].getBoundingClientRect().top : 0;
+  rightColW      = rightCol.offsetWidth;
+  totalScrollH   = document.documentElement.scrollHeight - window.innerHeight;
+  // Full travel range: left edge of left-col → right edge of right-col
+  const lcRect = leftCol.getBoundingClientRect();
+  const rcRect = rightCol.getBoundingClientRect();
+  progressRangeW = Math.max(rcRect.right - lcRect.left, 0);
 }
 
 /* ── PARALLAX — pure math, zero DOM reads per frame ─────────── */
@@ -596,9 +601,8 @@ function updateProgress() {
     : totalScrollH > 0
       ? Math.round((window.scrollY / totalScrollH) * 100)
       : 0;
-  const rangeW = Math.max(rightColW - 20, 0);
   progressEl.textContent = `${pct}%`;
-  progressEl.style.transform = `translateX(${(pct / 100) * rangeW}px)`;
+  progressEl.style.transform = `translateX(${(pct / 100) * progressRangeW}px)`;
 }
 
 /* ── BOTTOM NAV ─────────────────────────────────────────────── */
@@ -674,13 +678,15 @@ function checkLoopBoundary() {
   const n = PROJECTS.length;
   const mid = window.scrollY + window.innerHeight / 2;
 
-  // Boundaries are the CLONE zone edges (not the real zone edges).
-  // Real-zone edges would land in the opposite clone zone and trigger a
-  // reverse jump immediately → oscillation. Clone-zone edges land safely
-  // inside the real zone every time.
+  // Asymmetric triggers — fire as early as possible without causing oscillation.
+  // DOWN (post): fire when last REAL item center passes viewport mid. Lands at
+  //   last pre-clone center → safely in pre-clone zone, pre-trigger won't re-fire.
+  // UP (pre): fire when last pre-clone center hits viewport mid. Lands just below
+  //   last real item center → safely in real zone, post-trigger won't re-fire.
+  // This fires before any clone pixels are visible (DOWN) so the jump is invisible.
   let delta = 0;
-  if (mid <= imageCenters[n - 1]) delta = +loopOneTrackH;
-  else if (mid >= imageCenters[2 * n]) delta = -loopOneTrackH;
+  if (mid <= imageCenters[n - 1])       delta = +loopOneTrackH; // UP: into pre-clone zone
+  else if (mid > imageCenters[2 * n - 1]) delta = -loopOneTrackH; // DOWN: past last real item
   if (delta === 0) return;
 
   loopJumping = true;

@@ -225,15 +225,17 @@ body.anim-type-2 #featured-label {
 }
 
 #progress-pct {
-  position: absolute;
+  position: fixed;
   bottom: 40px;
-  left: 0;
+  left: var(--col-pad);
   font-family: var(--font-list);
   font-size: 12px;
   font-weight: 400;
   color: var(--c-muted);
   white-space: nowrap;
-  transition: transform 0.4s ease;
+  transition: transform 0.15s ease;
+  z-index: 100;
+  pointer-events: none;
 }
 
 /* ── RIGHT COLUMN ───────────────────────────────────────────── */
