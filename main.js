@@ -442,31 +442,37 @@ function positionListType1() {
   }
 }
 
-/* TYPE 2 — whole list snaps so active item sits at center; no per-item movement */
+/* TYPE 2 — continuous scroll, each item tracks fracIdx, active pinned at center ── */
 function positionListType2() {
   if (!leftItemNaturalYs.length) return;
 
-  const n         = PROJECTS.length;
-  const fracIdx   = getScrollFracIdx();
-  // Integer active index only — no fractional interpolation → no continuous movement
-  const activeIdx = ((Math.round(fracIdx) % n) + n) % n;
-
-  if (activeIdx !== state.activeIndex) {
-    state.activeIndex = activeIdx;
-    updateActiveCls(activeIdx);
-  }
-
+  const n       = PROJECTS.length;
+  const fracIdx = getScrollFracIdx();
   const itemH   = leftItemNaturalYs.length > 1
     ? leftItemNaturalYs[1] - leftItemNaturalYs[0]
     : 22;
   const centerY = window.innerHeight / 2;
-  const natY    = leftItemNaturalYs[activeIdx];
 
-  // Move the whole list container so the active item is at viewport center.
-  // No per-item transforms — items never move relative to each other.
-  leftList.querySelectorAll('li').forEach(li => { li.style.transform = ''; });
-  leftList.style.transition = 'none';
-  leftList.style.transform  = `translateY(${centerY - (natY + itemH / 2)}px)`;
+  // Clear any container-level transform left over from Type 1 or previous snap
+  leftList.style.transform = '';
+
+  leftList.querySelectorAll('li').forEach((li, i) => {
+    let diff = i - fracIdx;
+    // Wrap diff to shortest path: keeps all items within ±n/2 of center
+    diff -= Math.round(diff / n) * n;
+
+    const targetY  = centerY + diff * itemH;
+    const naturalY = leftItemNaturalYs[i];
+    li.style.transition = 'none';
+    li.style.transform  = `translateY(${targetY - naturalY}px)`;
+  });
+
+  // Active = item closest to center
+  const activeIdx = ((Math.round(fracIdx) % n) + n) % n;
+  if (activeIdx !== state.activeIndex) {
+    state.activeIndex = activeIdx;
+    updateActiveCls(activeIdx);
+  }
 }
 
 /* ── PROGRESS INDICATOR ─────────────────────────────────────── */
