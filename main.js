@@ -53,6 +53,9 @@ let imageCenters = [];   // absolute document-Y of each img-wrap centre
 let imageSizes   = [];   // rendered height of each img-wrap
 let rightAnchorY = 0;    // viewport-Y of first right-list item (fixed col)
 let rightColW    = 0;    // width of right column
+let totalScrollH = 0;    // scrollHeight - innerHeight, cached
+let leftItems    = [];   // left list <li> refs
+let rightItems   = [];   // right list <li> refs
 
 /* ── DOM REFS ───────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
@@ -105,10 +108,12 @@ function buildLists() {
       const wrap = imageTrack.querySelector(`.img-wrap[data-idx="${i}"]`);
       if (!wrap) return;
       const rect   = wrap.getBoundingClientRect();
-      const target = window.scrollY + rect.top + rect.height / 2 - window.innerHeight / 2;
-      window.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+      const target = Math.max(0, window.scrollY + rect.top + rect.height / 2 - window.innerHeight / 2);
+      if (lenis) lenis.scrollTo(target);
+      else        window.scrollTo({ top: target, behavior: 'smooth' });
     });
     leftList.appendChild(li);
+    leftItems.push(li);
   });
 
   CATEGORIES.forEach(cat => {
@@ -117,6 +122,7 @@ function buildLists() {
     li.dataset.cat = cat;
     if (cat === PROJECTS[0].category) li.classList.add('is-active');
     rightList.appendChild(li);
+    rightItems.push(li);
   });
 }
 
@@ -130,6 +136,7 @@ function buildTrack() {
     const img = document.createElement('img');
     img.alt           = p.name;
     img.src           = `assets/${p.img}`;
+    img.decoding      = 'async';
     img.fetchPriority = i === 0 ? 'high' : 'auto';
 
     wrap.appendChild(img);
@@ -198,8 +205,9 @@ function runIntro() {
     });
 
     const img = document.createElement('img');
-    img.src  = `assets/${p.img}`;
-    img.alt  = '';
+    img.src      = `assets/${p.img}`;
+    img.alt      = '';
+    img.decoding = 'async';
     tile.appendChild(img);
     introTiles.appendChild(tile);
 
@@ -295,7 +303,10 @@ function runIntro() {
   // Phase 8 — scroll restored, overlay removed instantly (seamless cut)
   setTimeout(() => {
     document.body.classList.remove('intro-running');
+
+    // Snap native scroll first so Lenis reads the correct starting position
     window.scrollTo({ top: savedScroll, behavior: 'instant' });
+    if (lenis) lenis.start();
 
     state.scrollEnabled = true;
     state.activeIndex   = getActiveIndex();
@@ -347,9 +358,8 @@ function getScrollFracIdx() {
 function cacheLayout() {
   // ── Left list natural positions (clear transforms before measuring)
   leftList.style.transform = '';
-  leftList.querySelectorAll('li').forEach(li => li.style.transform = '');
-  leftItemNaturalYs = [...leftList.querySelectorAll('li')]
-    .map(li => li.getBoundingClientRect().top);
+  leftItems.forEach(li => li.style.transform = '');
+  leftItemNaturalYs = leftItems.map(li => li.getBoundingClientRect().top);
 
   // ── Image track: batch all reads together, zero writes
   imageWraps = [...imageTrack.querySelectorAll('.img-wrap')];
@@ -360,9 +370,9 @@ function cacheLayout() {
   imageSizes   = rects.map(r => r.height);
 
   // ── Right column measurements (fixed, constant after layout)
-  const ri = rightList.querySelector('li');
-  rightAnchorY = ri ? ri.getBoundingClientRect().top : 0;
+  rightAnchorY = rightItems[0] ? rightItems[0].getBoundingClientRect().top : 0;
   rightColW    = rightCol.offsetWidth;
+  totalScrollH = document.documentElement.scrollHeight - window.innerHeight;
 }
 
 /* ── PARALLAX — pure math, zero DOM reads per frame ─────────── */
@@ -387,13 +397,9 @@ function setParallax(px) {
 
 /* ── SIDE LIST UPDATE ───────────────────────────────────────── */
 function updateActiveCls(idx) {
-  leftList.querySelectorAll('li').forEach((li, i) => {
-    li.classList.toggle('is-active', i === idx);
-  });
+  leftItems.forEach((li, i) => li.classList.toggle('is-active', i === idx));
   const activeCat = PROJECTS[idx].category;
-  rightList.querySelectorAll('li').forEach(li => {
-    li.classList.toggle('is-active', li.dataset.cat === activeCat);
-  });
+  rightItems.forEach(li => li.classList.toggle('is-active', li.dataset.cat === activeCat));
 }
 
 function updateLists() {
@@ -419,11 +425,10 @@ function positionListType1() {
     ? leftItemNaturalYs[1] - leftItemNaturalYs[0]
     : 22;
 
-  leftList.querySelectorAll('li').forEach((li, i) => {
+  leftItems.forEach((li, i) => {
     const targetY  = anchorY + i * itemH;
     const naturalY = leftItemNaturalYs[i];
     const totalDY  = targetY - naturalY;
-    // progress 0→1 as norm goes from i→i+1; stays 1 once parked
     const progress = Math.min(1, Math.max(0, norm - i));
     li.style.transition = 'none';
     li.style.transform  = `translateY(${totalDY * progress}px)`;
@@ -457,10 +462,9 @@ function positionListType2() {
   const centerY = window.innerHeight / 2;
 
   leftList.style.transform = '';
-  leftList.querySelectorAll('li').forEach((li, i) => {
-    let diff = i - activeIdx;            // integer diff → no fractional drift
-    diff -= Math.round(diff / n) * n;   // wrap to shortest path ±n/2
-
+  leftItems.forEach((li, i) => {
+    let diff = i - activeIdx;
+    diff -= Math.round(diff / n) * n;
     const targetY  = centerY + diff * itemH;
     const naturalY = leftItemNaturalYs[i];
     li.style.transition = 'none';
@@ -468,12 +472,10 @@ function positionListType2() {
   });
 }
 
-/* ── PROGRESS INDICATOR — uses cached col width, no DOM reads ── */
+/* ── PROGRESS INDICATOR — pure math, zero DOM reads ─────────── */
 function updateProgress() {
-  const docH   = document.documentElement.scrollHeight - window.innerHeight;
-  const pct    = docH > 0 ? Math.round((window.scrollY / docH) * 100) : 0;
-  const rangeW = Math.max((rightColW || rightCol.offsetWidth) - 20, 0);
-
+  const pct    = totalScrollH > 0 ? Math.round((window.scrollY / totalScrollH) * 100) : 0;
+  const rangeW = Math.max(rightColW - 20, 0);
   progressEl.textContent     = `${pct}%`;
   progressEl.style.transform = `translateX(${(pct / 100) * rangeW}px)`;
 }
@@ -487,25 +489,39 @@ function updateBottomNav() {
   }
 }
 
-/* ── SCROLL HANDLER ─────────────────────────────────────────── */
-let rafPending = false;
-function onScroll() {
-  if (!state.scrollEnabled || rafPending) return;
-  rafPending = true;
-  requestAnimationFrame(() => {
-    rafPending = false;
+/* ── LENIS SMOOTH SCROLL ─────────────────────────────────────── */
+let lenis = null;
 
-    // Both types run every frame — continuous scroll-linked movement
-    if (state.animType === 1) {
-      positionListType1();
-    } else {
-      positionListType2();
-    }
+function runAnimFrame() {
+  if (!state.scrollEnabled) return;
+  if (state.animType === 1) positionListType1();
+  else                       positionListType2();
+  updateParallax();
+  updateProgress();
+  updateBottomNav();
+}
 
-    updateParallax();
-    updateProgress();
-    updateBottomNav();
+function initLenis() {
+  if (typeof Lenis === 'undefined') {
+    // Fallback: native scroll if CDN fails
+    window.addEventListener('scroll', () => {
+      if (state.scrollEnabled) requestAnimationFrame(runAnimFrame);
+    }, { passive: true });
+    return;
+  }
+
+  lenis = new Lenis({
+    duration:    1.1,
+    easing:      t => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+    smoothWheel: true,
   });
+
+  lenis.stop(); // held until intro completes
+
+  lenis.on('scroll', runAnimFrame);
+
+  function tick(time) { lenis.raf(time); requestAnimationFrame(tick); }
+  requestAnimationFrame(tick);
 }
 
 /* ── PLAYGROUND ─────────────────────────────────────────────── */
@@ -592,15 +608,8 @@ loopCb.addEventListener('change', () => {
 function init() {
   buildLists();
   buildTrack();
-
-  // Apply initial body class for z-index
   document.body.classList.add('zindex-on');
-
-  // Left list sits at bottom — no initial offset needed
-
-  window.addEventListener('scroll', onScroll, { passive: true });
-
-  // Small delay so fonts/layout settle before intro
+  initLenis();
   setTimeout(runIntro, 100);
 }
 

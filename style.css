@@ -314,7 +314,6 @@ body.anim-type-2 #featured-label {
   position: relative;
   overflow: hidden;
   flex-shrink: 0;
-  will-change: transform;
 }
 
 .img-wrap.landscape {
