@@ -43,8 +43,16 @@ const state = {
 // Prevent browser from overriding our manual scroll restoration
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
-let savedScroll      = 0;
+let savedScroll       = 0;
 let leftItemNaturalYs = []; // cached natural viewport-Y of each left li (fixed col, constant)
+
+// Layout cache — populated once after intro, zero DOM reads in scroll loop
+let imageWraps   = [];   // .img-wrap elements
+let imageEls     = [];   // inner <img> elements
+let imageCenters = [];   // absolute document-Y of each img-wrap centre
+let imageSizes   = [];   // rendered height of each img-wrap
+let rightAnchorY = 0;    // viewport-Y of first right-list item (fixed col)
+let rightColW    = 0;    // width of right column
 
 /* ── DOM REFS ───────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
@@ -120,20 +128,9 @@ function buildTrack() {
     wrap.dataset.idx = i;
 
     const img = document.createElement('img');
-    img.alt = p.name;
-
-    const onLoaded = () => img.classList.add('is-loaded');
-
-    if (i < 6) {
-      img.src     = `assets/${p.img}`;
-      img.loading = 'eager';
-      if (i === 0) img.fetchPriority = 'high';
-      img.addEventListener('load', onLoaded, { once: true });
-      if (img.complete && img.naturalHeight > 0) onLoaded();
-    } else {
-      img.dataset.src = `assets/${p.img}`;
-      img.addEventListener('load', onLoaded, { once: true });
-    }
+    img.alt           = p.name;
+    img.src           = `assets/${p.img}`;
+    img.fetchPriority = i === 0 ? 'high' : 'auto';
 
     wrap.appendChild(img);
 
@@ -143,24 +140,6 @@ function buildTrack() {
     link.appendChild(wrap);
     imageTrack.appendChild(link);
   });
-}
-
-/* ── LAZY LOAD — IntersectionObserver, 800px ahead ─────────── */
-function setupLazyLoad() {
-  const lazyImgs = [...imageTrack.querySelectorAll('img[data-src]')];
-  if (!lazyImgs.length) return;
-
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (!entry.isIntersecting) return;
-      const img   = entry.target;
-      img.src     = img.dataset.src;
-      delete img.dataset.src;
-      observer.unobserve(img);
-    });
-  }, { rootMargin: '800px 0px' });
-
-  lazyImgs.forEach(img => observer.observe(img));
 }
 
 /* ── INTRO ANIMATION ────────────────────────────────────────── */
@@ -320,7 +299,7 @@ function runIntro() {
 
     state.scrollEnabled = true;
     state.activeIndex   = getActiveIndex();
-    cacheLeftItemYs();
+    cacheLayout();
     updateLists();
     updateParallax();
     updateProgress();
@@ -337,60 +316,66 @@ function runIntro() {
   }, cascadeDone + 100);
 }
 
-/* ── ACTIVE INDEX DETECTION ─────────────────────────────────── */
+/* ── ACTIVE INDEX DETECTION — pure math, no DOM reads ───────── */
 function getActiveIndex() {
-  const wraps = imageTrack.querySelectorAll('.img-wrap');
-  const vh    = window.innerHeight;
-  const mid   = window.scrollY + vh / 2;
-  let   best  = 0;
-  let   bestD = Infinity;
-
-  wraps.forEach((w, i) => {
-    const rect   = w.getBoundingClientRect();
-    const center = window.scrollY + rect.top + rect.height / 2;
-    const d      = Math.abs(center - mid);
+  if (!imageCenters.length) return 0;
+  const mid = window.scrollY + window.innerHeight / 2;
+  let best = 0, bestD = Infinity;
+  for (let i = 0; i < imageCenters.length; i++) {
+    const d = Math.abs(imageCenters[i] - mid);
     if (d < bestD) { bestD = d; best = i; }
-  });
-
+  }
   return best;
 }
 
-/* ── CONTINUOUS SCROLL FRACTION ────────────────────────────────*/
+/* ── CONTINUOUS SCROLL FRACTION — pure math, no DOM reads ──── */
 function getScrollFracIdx() {
-  const wraps = [...imageTrack.querySelectorAll('.img-wrap')];
-  if (!wraps.length) return 0;
-  const mid = window.scrollY + window.innerHeight / 2;
-  const centers = wraps.map(w => {
-    const r = w.getBoundingClientRect();
-    return window.scrollY + r.top + r.height / 2;
-  });
-  if (mid <= centers[0]) return 0;
-  if (mid >= centers[centers.length - 1]) return centers.length - 1;
-  for (let i = 0; i < centers.length - 1; i++) {
-    if (mid >= centers[i] && mid < centers[i + 1]) {
-      return i + (mid - centers[i]) / (centers[i + 1] - centers[i]);
+  if (!imageCenters.length) return 0;
+  const mid  = window.scrollY + window.innerHeight / 2;
+  const last = imageCenters.length - 1;
+  if (mid <= imageCenters[0])    return 0;
+  if (mid >= imageCenters[last]) return last;
+  for (let i = 0; i < last; i++) {
+    if (mid >= imageCenters[i] && mid < imageCenters[i + 1]) {
+      return i + (mid - imageCenters[i]) / (imageCenters[i + 1] - imageCenters[i]);
     }
   }
   return 0;
 }
 
-/* ── CACHE LEFT ITEM NATURAL POSITIONS ──────────────────────── */
-function cacheLeftItemYs() {
-  // Clear container transform AND per-item transforms before measuring
+/* ── CACHE LAYOUT — called once after intro, and on resize ──── */
+function cacheLayout() {
+  // ── Left list natural positions (clear transforms before measuring)
   leftList.style.transform = '';
   leftList.querySelectorAll('li').forEach(li => li.style.transform = '');
   leftItemNaturalYs = [...leftList.querySelectorAll('li')]
     .map(li => li.getBoundingClientRect().top);
+
+  // ── Image track: batch all reads together, zero writes
+  imageWraps = [...imageTrack.querySelectorAll('.img-wrap')];
+  imageEls   = imageWraps.map(w => w.querySelector('img'));
+  const sy   = window.scrollY;
+  const rects = imageWraps.map(w => w.getBoundingClientRect()); // one batch
+  imageCenters = rects.map(r => sy + r.top + r.height / 2);
+  imageSizes   = rects.map(r => r.height);
+
+  // ── Right column measurements (fixed, constant after layout)
+  const ri = rightList.querySelector('li');
+  rightAnchorY = ri ? ri.getBoundingClientRect().top : 0;
+  rightColW    = rightCol.offsetWidth;
 }
 
-/* ── PARALLAX ───────────────────────────────────────────────── */
+/* ── PARALLAX — pure math, zero DOM reads per frame ─────────── */
 function updateParallax() {
-  imageTrack.querySelectorAll('.img-wrap').forEach(wrap => {
-    const rect     = wrap.getBoundingClientRect();
-    const progress = (window.innerHeight - rect.top) / (window.innerHeight + rect.height);
-    const offset   = (progress - 0.5) * state.parallax;
-    wrap.querySelector('img').style.transform = `translateY(${offset}px)`;
-  });
+  if (!imageCenters.length) return;
+  const vh = window.innerHeight;
+  const sy = window.scrollY;
+  for (let i = 0; i < imageCenters.length; i++) {
+    const h        = imageSizes[i];
+    const top      = imageCenters[i] - h / 2 - sy;   // viewport-Y of wrap top
+    const progress = (vh - top) / (vh + h);
+    imageEls[i].style.transform = `translateY(${((progress - 0.5) * state.parallax)}px)`;
+  }
 }
 
 function setParallax(px) {
@@ -424,16 +409,12 @@ function updateLists() {
 /* TYPE 1 — each item travels individually from bottom to its slot ─ */
 function positionListType1() {
   if (!leftItemNaturalYs.length) return;
-  const rightItems = [...rightList.querySelectorAll('li')];
-  if (!rightItems.length) return;
 
   const n       = PROJECTS.length;
   const fracIdx = getScrollFracIdx();
-  // Scale fracIdx [0, n-1] → normalized [0, n] so item 0 starts at 0
-  // and item n-1 (AMM School) fully parks at the last image center
   const norm    = fracIdx * n / Math.max(n - 1, 1);
 
-  const anchorY = rightItems[0].getBoundingClientRect().top;
+  const anchorY = rightAnchorY; // cached — fixed col, no DOM read needed
   const itemH   = leftItemNaturalYs.length > 1
     ? leftItemNaturalYs[1] - leftItemNaturalYs[0]
     : 22;
@@ -487,16 +468,14 @@ function positionListType2() {
   });
 }
 
-/* ── PROGRESS INDICATOR ─────────────────────────────────────── */
+/* ── PROGRESS INDICATOR — uses cached col width, no DOM reads ── */
 function updateProgress() {
-  const docH  = document.documentElement.scrollHeight - window.innerHeight;
-  const pct   = docH > 0 ? Math.round((window.scrollY / docH) * 100) : 0;
-  // Travel left→right across the right column (col width ≈ 150px usable)
-  const colW  = rightCol.offsetWidth;
-  const rangeW = Math.max(colW - 20, 0);
+  const docH   = document.documentElement.scrollHeight - window.innerHeight;
+  const pct    = docH > 0 ? Math.round((window.scrollY / docH) * 100) : 0;
+  const rangeW = Math.max((rightColW || rightCol.offsetWidth) - 20, 0);
 
-  progressEl.textContent      = `${pct}%`;
-  progressEl.style.transform  = `translateX(${(pct / 100) * rangeW}px)`;
+  progressEl.textContent     = `${pct}%`;
+  progressEl.style.transform = `translateX(${(pct / 100) * rangeW}px)`;
 }
 
 /* ── BOTTOM NAV ─────────────────────────────────────────────── */
@@ -515,8 +494,6 @@ function onScroll() {
   rafPending = true;
   requestAnimationFrame(() => {
     rafPending = false;
-
-    sessionStorage.setItem('kh_scroll', String(window.scrollY));
 
     // Both types run every frame — continuous scroll-linked movement
     if (state.animType === 1) {
@@ -556,7 +533,7 @@ pgPanel.querySelectorAll('.pg-btn[data-anim]').forEach(btn => {
       li.style.transition = 'none';
       li.style.transform  = '';
     });
-    cacheLeftItemYs();
+    cacheLayout();
     updateLists();
   });
 });
@@ -615,7 +592,6 @@ loopCb.addEventListener('change', () => {
 function init() {
   buildLists();
   buildTrack();
-  setupLazyLoad();
 
   // Apply initial body class for z-index
   document.body.classList.add('zindex-on');

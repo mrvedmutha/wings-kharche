@@ -338,12 +338,6 @@ body.anim-type-2 #featured-label {
   display: block;
   will-change: transform;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.5s ease;
-}
-
-.img-wrap img.is-loaded {
-  opacity: 1;
 }
 
 /* Anchor wrapper — invisible to flex layout */
