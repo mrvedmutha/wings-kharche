@@ -175,10 +175,16 @@ body.intro-running { overflow: hidden; }
 
 #left-col.visible { opacity: 1; }
 
-/* Type 2 — centre col vertically, featured label sits below list */
+/* Type 2 — centre list, pin /Featured to bottom so it never overlaps items */
 body.anim-type-2 #left-col {
   justify-content: center;
   padding-bottom: 0;
+}
+
+body.anim-type-2 #featured-label {
+  position: absolute;
+  bottom: 40px;
+  left: 0;
 }
 
 #left-list-wrap {
