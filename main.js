@@ -442,33 +442,12 @@ function positionListType1() {
   }
 }
 
-/* TYPE 2 — continuous scroll, each item tracks fracIdx, active pinned at center ── */
+/* TYPE 2 — no movement at all; only active highlight switches ── */
 function positionListType2() {
-  if (!leftItemNaturalYs.length) return;
-
-  const n       = PROJECTS.length;
-  const fracIdx = getScrollFracIdx();
-  const itemH   = leftItemNaturalYs.length > 1
-    ? leftItemNaturalYs[1] - leftItemNaturalYs[0]
-    : 22;
-  const centerY = window.innerHeight / 2;
-
-  // Clear any container-level transform left over from Type 1 or previous snap
-  leftList.style.transform = '';
-
-  leftList.querySelectorAll('li').forEach((li, i) => {
-    let diff = i - fracIdx;
-    // Wrap diff to shortest path: keeps all items within ±n/2 of center
-    diff -= Math.round(diff / n) * n;
-
-    const targetY  = centerY + diff * itemH;
-    const naturalY = leftItemNaturalYs[i];
-    li.style.transition = 'none';
-    li.style.transform  = `translateY(${targetY - naturalY}px)`;
-  });
-
-  // Active = item closest to center
+  const n         = PROJECTS.length;
+  const fracIdx   = getScrollFracIdx();
   const activeIdx = ((Math.round(fracIdx) % n) + n) % n;
+
   if (activeIdx !== state.activeIndex) {
     state.activeIndex = activeIdx;
     updateActiveCls(activeIdx);
@@ -537,12 +516,14 @@ pgPanel.querySelectorAll('.pg-btn[data-anim]').forEach(btn => {
     pgPanel.querySelectorAll('.pg-btn[data-anim]').forEach(b => b.classList.remove('is-active'));
     btn.classList.add('is-active');
     state.animType = parseInt(btn.dataset.anim);
-    // Reset both transform modes before switching
+    document.body.classList.toggle('anim-type-2', state.animType === 2);
+    // Reset all transforms before switching
     leftList.style.transform = '';
     leftList.querySelectorAll('li').forEach(li => {
       li.style.transition = 'none';
       li.style.transform  = '';
     });
+    cacheLeftItemYs();
     updateLists();
   });
 });

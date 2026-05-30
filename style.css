@@ -175,6 +175,12 @@ body.intro-running { overflow: hidden; }
 
 #left-col.visible { opacity: 1; }
 
+/* Type 2 — centre list vertically so mid-item sits at viewport centre */
+body.anim-type-2 #left-col {
+  justify-content: center;
+  padding-bottom: 0;
+}
+
 #left-list-wrap {
   position: relative;
   overflow: visible;
